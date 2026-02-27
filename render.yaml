@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: tsh-erp
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tsh-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PORT
+        value: 10000
+
+databases:
+  - name: tsh-db
+    databaseName: tsh_erp
+    user: tsh_user

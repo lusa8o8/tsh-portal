@@ -1,0 +1,89 @@
+/* sidebar.css - Tutor Role Navigation Styles */
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+}
+
+.notification-badge {
+    background: #e74c3c;
+    color: #fff;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: bold;
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.quick-start {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 24px;
+    margin-top: 40px;
+}
+
+.quick-start h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    color: #2c3e50;
+}
+
+.help-section {
+    margin-bottom: 24px;
+}
+
+.help-section:last-child {
+    margin-bottom: 0;
+}
+
+.help-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #34495e;
+}
+
+.help-list {
+    list-style: none;
+    padding-left: 0;
+}
+
+.help-list li {
+    padding: 8px 0;
+    line-height: 1.6;
+}
+
+.help-list li strong {
+    color: #2c3e50;
+}
+
+/* Responsive Behavior */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+        /* No animations (instant show/hide) */
+        transition: none; 
+    }
+    
+    body.sidebar-open .sidebar {
+        transform: translateX(0);
+    }
+    
+    body.sidebar-open {
+        overflow: hidden;
+    }
+}

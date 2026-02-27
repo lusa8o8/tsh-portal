@@ -1,0 +1,1196 @@
+// TSH PORTAL Backend - Week 1 + Week 2: Campaign Gate + Quality Gate
+// Strict Mode: Supervisor Approved
+
+const express = require('express');
+const cors = require('cors');
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
+
+const app = express();
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+app.use(cors({
+    origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json());
+app.use(express.static('.'));
+
+// ============================================
+// RATE LIMITING (Day 2)
+// ============================================
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, // Limit each IP to 10 requests per windowMs for auth
+    message: { error: 'Too many attempts, please try again after 15 minutes' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // Limit each IP to 100 requests per minute
+    message: { error: 'Too many requests, please slow down' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/auth/login', authLimiter);
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+    console.warn('⚠️ WARNING: JWT_SECRET not set in production. Using fallback.');
+}
+
+// ============================================
+// AUTH MIDDLEWARE
+// ============================================
+
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ error: 'No token provided' });
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Invalid token' });
+        req.user = user;
+        next();
+    });
+};
+
+const requireRole = (...roles) => (req, res, next) => {
+    if (!roles.includes(req.user.role)) return res.status(403).json({ error: 'Insufficient permissions' });
+    next();
+};
+
+// ============================================
+// SECURITY HELPERS (Day 2)
+// ============================================
+const validateInput = (data, fields) => {
+    for (const field of fields) {
+        if (!data[field] || (typeof data[field] === 'string' && data[field].trim() === '')) {
+            return `Field '${field}' is required and cannot be empty`;
+        }
+    }
+    return null;
+};
+
+// ============================================
+// AUTH ROUTES
+// ============================================
+
+// Registration endpoint (Task 1.2)
+app.post('/api/register', async (req, res) => {
+    try {
+        const { name, email, password, subjects } = req.body;
+
+        // Validation
+        if (!name || !email || !password || !subjects || !Array.isArray(subjects) || subjects.length === 0) {
+            return res.status(400).json({ error: 'All fields are required' });
+        }
+
+        if (subjects.length > 2) {
+            return res.status(400).json({ error: 'Maximum 2 subjects allowed' });
+        }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ error: 'Invalid email format' });
+        }
+
+        // Password validation
+        if (password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
+
+        // Check if email already exists
+        const existingUser = await pool.query(
+            'SELECT id FROM users WHERE email = $1',
+            [email.toLowerCase()]
+        );
+
+        if (existingUser.rows.length > 0) {
+            return res.status(400).json({ error: 'Email already registered' });
+        }
+
+        // Hash password
+        const password_hash = await bcrypt.hash(password, 10);
+
+        // Create pending user
+        const result = await pool.query(
+            `INSERT INTO users (email, password_hash, name, role, account_status, subjects, created_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) 
+             RETURNING id, email, name`,
+            [email.toLowerCase(), password_hash, name, 'tutor', 'pending', JSON.stringify(subjects)]
+        );
+
+        const newUser = result.rows[0];
+
+        // Notify admin (all users with admin role)
+        const admins = await pool.query(`SELECT id FROM users WHERE role = 'admin'`);
+        for (const admin of admins.rows) {
+            await pool.query(
+                `INSERT INTO notifications (user_id, message, recipient_role) 
+                 VALUES ($1, $2, $3)`,
+                [
+                    admin.id,
+                    `New Registration Pending: ${name} (${email}). Review in User Management.`,
+                    'admin'
+                ]
+            );
+        }
+
+        res.status(201).json({
+            message: 'Registration successful. Awaiting admin approval.',
+            userId: newUser.id
+        });
+
+    } catch (err) {
+        console.error('Registration error:', err);
+        res.status(500).json({ error: 'Registration failed' });
+    }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const error = validateInput(req.body, ['email', 'name', 'role', 'password']);
+        if (error) return res.status(400).json({ error });
+
+        const { email, name, role, password } = req.body;
+        const validRoles = ['hod', 'tutor', 'marketing', 'crm', 'content_manager', 'admin'];
+        if (!validRoles.includes(role)) return res.status(400).json({ error: 'Invalid role' });
+        const password_hash = await bcrypt.hash(password, 10);
+        const result = await pool.query(
+            'INSERT INTO users (email, name, role, password_hash, account_status) VALUES ($1, $2, $3, $4, \'approved\') RETURNING id, email, name, role',
+            [email, name, role, password_hash]
+        );
+        res.json({ user: result.rows[0] });
+    } catch (error) {
+        if (error.code === '23505') return res.status(400).json({ error: 'Email exists' });
+        console.error('Registration error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const error = validateInput(req.body, ['email', 'password']);
+        if (error) return res.status(400).json({ error });
+
+        const { email, password } = req.body;
+        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+        if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+
+        const user = result.rows[0];
+
+        // CHECK ACCOUNT STATUS (Task 1.4)
+        if (user.account_status === 'pending') {
+            return res.status(403).json({
+                error: 'Account pending approval. You will receive an email once approved.'
+            });
+        }
+
+        if (user.account_status === 'rejected') {
+            return res.status(403).json({
+                error: 'Account registration was rejected. Please contact support.'
+            });
+        }
+
+        const valid = await bcrypt.compare(password, user.password_hash);
+        if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+        const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role, subjects: user.subjects } });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Admin User Management Endpoints (Task 1.6)
+app.get('/api/users', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { status } = req.query;
+        let query = 'SELECT id, email, name, role, account_status, subjects, created_at FROM users';
+        let params = [];
+
+        if (status) {
+            query += ' WHERE account_status = $1';
+            params.push(status);
+        }
+
+        query += ' ORDER BY created_at DESC';
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (err) {
+        console.error('Error fetching users:', err);
+        res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
+
+app.patch('/api/users/:id/approve', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(
+            `UPDATE users 
+             SET account_status = 'approved', 
+                 approved_at = CURRENT_TIMESTAMP, 
+                 approved_by = $1 
+             WHERE id = $2 AND account_status = 'pending'
+             RETURNING id, email, name`,
+            [req.user.id, id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found or already processed' });
+        }
+
+        const user = result.rows[0];
+
+        // Notify approved user
+        await pool.query(
+            `INSERT INTO notifications (user_id, message, recipient_role) 
+             VALUES ($1, $2, $3)`,
+            [
+                id,
+                'Account Approved! Welcome to TSH PORTAL. You can now login and start teaching.',
+                'tutor'
+            ]
+        );
+
+        res.json({ message: 'User approved', user });
+    } catch (err) {
+        console.error('Error approving user:', err);
+        res.status(500).json({ error: 'Failed to approve user' });
+    }
+});
+
+app.patch('/api/users/:id/reject', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+
+        const result = await pool.query(
+            `UPDATE users 
+             SET account_status = 'rejected' 
+             WHERE id = $1 AND account_status = 'pending'
+             RETURNING id, email, name`,
+            [id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found or already processed' });
+        }
+
+        const user = result.rows[0];
+
+        // Notify rejected user
+        await pool.query(
+            `INSERT INTO notifications (user_id, message, recipient_role) 
+             VALUES ($1, $2, $3)`,
+            [
+                id,
+                `Registration Status: Your registration was not approved. ${reason ? 'Reason: ' + reason : 'Please contact support for more information.'}`,
+                'tutor'
+            ]
+        );
+
+        res.json({ message: 'User rejected', user });
+    } catch (err) {
+        console.error('Error rejecting user:', err);
+        res.status(500).json({ error: 'Failed to reject user' });
+    }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const error = validateInput(req.body, ['email', 'password']);
+        if (error) return res.status(400).json({ error });
+
+        const { email, password } = req.body;
+        const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+        const user = result.rows[0];
+        const valid = await bcrypt.compare(password, user.password_hash);
+        if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+        const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+        res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, email, name, role FROM users WHERE id = $1', [req.user.id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+        res.json({ user: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================
+// CAMPAIGN ROUTES (Week 1)
+// ============================================
+
+app.post('/api/campaigns', authenticateToken, requireRole('tutor', 'hod', 'admin'), async (req, res) => {
+    try {
+        const { subject, topic, trick_pattern, outcomes, target_date } = req.body;
+        if (!subject || !topic) return res.status(400).json({ error: 'Subject and topic required' });
+
+        const userId = req.user.id;
+        const userRole = req.user.role;
+
+        // Determine initial status based on role (Task 2.4)
+        let initialStatus = 'pending_approval';
+        let approvedBy = null;
+        let approvedAt = null;
+
+        if (userRole === 'hod' || userRole === 'admin') {
+            initialStatus = 'approved';
+            approvedBy = userId;
+            approvedAt = new Date();
+        }
+
+        const result = await pool.query(
+            `INSERT INTO campaigns (tutor_id, subject, topic, trick_pattern, outcomes, target_date, status, hod_approved_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [userId, subject, topic, trick_pattern, outcomes, target_date, initialStatus, approvedAt]
+        );
+        const campaign = result.rows[0];
+
+        // Notifications (Task 2.4/Issue 4)
+        if (initialStatus === 'approved') {
+            const recipients = await pool.query(`SELECT id, role FROM users WHERE role IN ('marketing', 'crm')`);
+            for (const recipient of recipients.rows) {
+                await pool.query(
+                    `INSERT INTO notifications (user_id, message, recipient_role) VALUES ($1, $2, $3)`,
+                    [recipient.id, `New Approved Campaign: ${subject}: ${topic} - Ready for promotion`, recipient.role]
+                );
+            }
+        } else {
+            const hods = await pool.query(`SELECT id FROM users WHERE role IN ('hod', 'admin')`);
+            for (const hod of hods.rows) {
+                await pool.query(
+                    `INSERT INTO notifications (user_id, message, recipient_role) VALUES ($1, $2, $3)`,
+                    [hod.id, `New Campaign Pending: ${subject}: ${topic} - Awaiting approval`, 'hod']
+                );
+            }
+        }
+
+        res.json({ campaign });
+    } catch (error) {
+        console.error('Error creating campaign:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/campaigns', authenticateToken, async (req, res) => {
+    try {
+        const userRole = req.user.role;
+        const userId = req.user.id;
+        const { status } = req.query;
+
+        let query = `
+            SELECT c.*, u.name as created_by_name, u.role as creator_role 
+            FROM campaigns c 
+            JOIN users u ON c.tutor_id = u.id 
+            WHERE 1=1
+        `;
+        let params = [];
+        let paramCount = 1;
+
+        // ROLE-BASED FILTERING (Task 2.1)
+        if (userRole === 'tutor') {
+            query += ` AND c.tutor_id = $${paramCount}`;
+            params.push(userId);
+            paramCount++;
+        } else if (userRole === 'marketing' || userRole === 'crm' || userRole === 'content_manager') {
+            query += ` AND c.status = 'approved'`;
+        }
+        // HOD/Admin see all
+
+        if (status) {
+            query += ` AND c.status = $${paramCount}`;
+            params.push(status);
+            paramCount++;
+        }
+
+        query += ` ORDER BY c.created_at DESC`;
+        const result = await pool.query(query, params);
+        res.json({ campaigns: result.rows });
+    } catch (error) {
+        console.error('Error fetching campaigns:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.patch('/api/campaigns/:id', authenticateToken, requireRole('hod', 'admin'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { status, reason } = req.body;
+        if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+        await client.query('BEGIN');
+        const updateQuery = status === 'approved'
+            ? `UPDATE campaigns SET status = 'approved', hod_approved_at = NOW() WHERE id = $1 AND status = 'pending_approval' RETURNING *`
+            : `UPDATE campaigns SET status = 'rejected', hod_rejection_reason = $2 WHERE id = $1 AND status = 'pending_approval' RETURNING *`;
+        const params = status === 'approved' ? [id] : [id, reason];
+        const result = await client.query(updateQuery, params);
+        if (result.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Campaign not found or not pending' }); }
+        const campaign = result.rows[0];
+        if (status === 'approved') {
+            await client.query(
+                `INSERT INTO notifications (campaign_id, message, recipient_role) VALUES ($1, $2, 'marketing'), ($1, $2, 'crm')`,
+                [campaign.id, `Campaign approved: ${campaign.topic}`]
+            );
+        } else {
+            await client.query(
+                `INSERT INTO notifications (campaign_id, message, recipient_role) VALUES ($1, $2, 'tutor')`,
+                [campaign.id, `Campaign rejected: ${campaign.topic}. Reason: ${reason}`]
+            );
+        }
+        await client.query('COMMIT');
+        res.json({ campaign });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Server error' });
+    } finally {
+        client.release();
+    }
+});
+
+// PATCH /api/campaigns/:id/outcome - Log results (Week 4)
+app.patch('/api/campaigns/:id/outcome', authenticateToken, requireRole('tutor', 'admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { outcome_log, outcome_status, actual_completion_date } = req.body;
+        if (!outcome_log || !outcome_status) {
+            return res.status(400).json({ error: 'outcome_log and outcome_status are required' });
+        }
+        const result = await pool.query(
+            `UPDATE campaigns 
+             SET outcome_log = $1, outcome_status = $2, actual_completion_date = $3, status = 'completed'
+             WHERE id = $4 AND tutor_id = $5 RETURNING *`,
+            [outcome_log, outcome_status, actual_completion_date || new Date().toISOString().split('T')[0], id, req.user.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Campaign not found or unauthorized' });
+        res.json({ campaign: result.rows[0] });
+    } catch (error) {
+        console.error('Error logging campaign outcome:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================
+// HUB ASSET ROUTES (Week 2)
+// ============================================
+
+// POST /api/assets/check-duplicate - Phase 2 uniqueness warning tool
+app.post('/api/assets/check-duplicate', authenticateToken, async (req, res) => {
+    try {
+        const { driveLinks } = req.body;
+        if (!driveLinks || driveLinks.length === 0) return res.json({ exists: false });
+
+        const params = driveLinks.map((_, i) => `$${i + 2}`).join(',');
+        const result = await pool.query(
+            `SELECT id, topic as title, asset_category 
+             FROM hub_assets 
+             WHERE tutor_id = $1 AND drive_link IN (${params})
+             ORDER BY created_at DESC 
+             LIMIT 1`,
+            [req.user.id, ...driveLinks]
+        );
+
+        if (result.rows.length > 0) {
+            res.json({
+                exists: true,
+                title: result.rows[0].title,
+                category: result.rows[0].asset_category
+            });
+        } else {
+            res.json({ exists: false });
+        }
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Server error check duplicate' });
+    }
+});
+
+// POST /api/assets - Tutor submits a BATCH of assets
+app.post('/api/assets', authenticateToken, requireRole('tutor', 'hod', 'admin'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+        // Accept either a single object or an array
+        const assets = Array.isArray(req.body) ? req.body : [req.body];
+        const VALID_TYPES = ['slides', 'worksheet', 'recording', 'other', 'marking_key', 'practice_bank'];
+
+        const category = assets[0]?.asset_category || 'hub_asset';
+        const minRequired = 1; // Both free_asset and hub_asset require minimum 1 asset
+
+        if (assets.length < minRequired) {
+            return res.status(400).json({ error: `Minimum ${minRequired} asset(s) required per submission` });
+        }
+
+        for (const a of assets) {
+            if (!a.subject || !a.topic || !a.asset_type || !a.drive_link) {
+                return res.status(400).json({ error: 'Each asset requires subject, topic, asset_type, and drive_link' });
+            }
+            if (!VALID_TYPES.includes(a.asset_type)) {
+                return res.status(400).json({ error: `Invalid asset_type: ${a.asset_type}` });
+            }
+        }
+
+        await client.query('BEGIN');
+        const inserted = [];
+        for (const a of assets) {
+            const status = category === 'free_asset' ? 'approved' : 'pending_cm';
+            const result = await client.query(
+                `INSERT INTO hub_assets (campaign_id, tutor_id, subject, topic, asset_type, drive_link, destination_path, status, asset_category, tutor_notes)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+                [a.campaign_id || null, req.user.id, a.subject, a.topic, a.asset_type, a.drive_link, a.destination_path || null, status, category, a.tutor_notes || null]
+            );
+            const assetInfo = result.rows[0];
+            inserted.push(assetInfo);
+
+            // Notify CM for both categories (Free Class: for repurposing, Hub Resource: for quality check)
+            const cmUsers = await client.query(`SELECT id FROM users WHERE role = 'content_manager'`);
+            for (const cm of cmUsers.rows) {
+                const msg = category === 'free_asset'
+                    ? `[Free Content] New upload ready for repurposing: "${assetInfo.topic}"`
+                    : `[Hub Resource] New upload ready for quality check: "${assetInfo.topic}"`;
+                await client.query(
+                    `INSERT INTO notifications (asset_id, message, user_id, recipient_role) VALUES ($1, $2, $3, $4)`,
+                    [assetInfo.id, msg, cm.id, 'content_manager']
+                );
+            }
+        }
+        await client.query('COMMIT');
+        res.json({ assets: inserted, count: inserted.length });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Server error' });
+    } finally {
+        client.release();
+    }
+});
+
+
+// GET /api/assets - List assets (filtered by role)
+app.get('/api/assets', authenticateToken, async (req, res) => {
+    try {
+        const userRole = req.user.role;
+        const userId = req.user.id;
+        const { status, category } = req.query;
+
+        let query = `
+            SELECT a.*, u.name as tutor_name, u.role as uploader_role 
+            FROM hub_assets a 
+            JOIN users u ON a.tutor_id = u.id 
+            WHERE 1=1
+        `;
+        let params = [];
+        let paramCount = 1;
+
+        // ROLE-BASED FILTERING (Task 2.2)
+        if (userRole === 'tutor') {
+            query += ` AND a.tutor_id = $${paramCount}`;
+            params.push(userId);
+            paramCount++;
+        } else if (userRole === 'content_manager') {
+            query += ` AND a.status IN ('approved', 'pending_cm', 'published')`;
+        } else if (userRole !== 'hod' && userRole !== 'admin') {
+            query += ` AND a.status = 'published'`;
+        }
+
+        if (status) {
+            query += ` AND a.status = $${paramCount}`;
+            params.push(status);
+            paramCount++;
+        }
+
+        if (category) {
+            query += ` AND a.asset_category = $${paramCount}`;
+            params.push(category);
+            paramCount++;
+        }
+
+        query += ` ORDER BY a.created_at DESC`;
+        const result = await pool.query(query, params);
+        res.json({ assets: result.rows });
+    } catch (error) {
+        console.error('Error fetching assets:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// PATCH /api/assets/:id - HOD approves or rejects (hub_asset only)
+app.patch('/api/assets/:id', authenticateToken, requireRole('hod', 'admin'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { status, hod_feedback } = req.body;
+        if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+        if (status === 'rejected' && !hod_feedback) return res.status(400).json({ error: 'Feedback required when rejecting' });
+
+        await client.query('BEGIN');
+
+        const updateQuery = status === 'approved'
+            ? `UPDATE hub_assets SET status = 'approved', hod_approved_at = NOW(), hod_feedback = $2,
+               content_manager_alerted_at = NOW() WHERE id = $1 AND status = 'pending_hod' AND asset_category = 'hub_asset' RETURNING *`
+            : `UPDATE hub_assets SET status = 'rejected', hod_feedback = $2 WHERE id = $1 AND status = 'pending_hod' AND asset_category = 'hub_asset' RETURNING *`;
+
+        const result = await client.query(updateQuery, [id, hod_feedback || null]);
+        if (result.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Asset not found or not pending' }); }
+
+        const asset = result.rows[0];
+
+        if (status === 'approved') {
+            await client.query(
+                `INSERT INTO notifications (asset_id, message, recipient_role) VALUES ($1, $2, 'content_manager')`,
+                [asset.id, `[Hub Resource] HOD approved: "${asset.topic}" (${asset.asset_type}) — ready to publish to Study Hub`]
+            );
+        } else {
+            await client.query(
+                `INSERT INTO notifications (asset_id, message, recipient_role) VALUES ($1, $2, 'tutor')`,
+                [asset.id, `[Hub Resource] HOD returned your submission: "${asset.topic}". Reason: ${hod_feedback || 'No reason given'}`]
+            );
+        }
+
+        await client.query('COMMIT');
+        res.json({ asset });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Server error' });
+    } finally {
+        client.release();
+    }
+});
+
+// PATCH /api/assets/:id/request-revision - Content Manager requests revision (free_asset)
+app.patch('/api/assets/:id/request-revision', authenticateToken, requireRole('content_manager', 'admin'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        if (!reason) return res.status(400).json({ error: 'Reason required' });
+
+        await client.query('BEGIN');
+        const result = await client.query(
+            `UPDATE hub_assets SET status = 'needs_revision' WHERE id = $1 AND asset_category = 'free_asset' RETURNING *`,
+            [id]
+        );
+        if (result.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Free asset not found' }); }
+
+        const asset = result.rows[0];
+        await client.query(
+            `INSERT INTO notifications (asset_id, message, recipient_role) VALUES ($1, $2, 'tutor')`,
+            [asset.id, `[Free Content] Revision requested on "${asset.topic}": ${reason} — please update your Drive link and re-notify CM`]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, asset });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(error);
+        res.status(500).json({ error: 'Server error' });
+    } finally {
+        client.release();
+    }
+});
+
+// PATCH /api/assets/:id/publish - Content Manager marks published
+app.patch('/api/assets/:id/publish', authenticateToken, requireRole('content_manager', 'admin'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        await client.query('BEGIN');
+        const result = await client.query(
+            `UPDATE hub_assets SET status = 'published', published_at = NOW() WHERE id = $1 AND (status = 'approved' OR status = 'pending_cm') RETURNING *`,
+            [id]
+        );
+        if (result.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Asset not found or not in reviewable state' });
+        }
+
+        const asset = result.rows[0];
+        const msg = asset.asset_category === 'free_asset'
+            ? `[Free Content] Published: "${asset.topic}" is now live on social platforms`
+            : `[Hub Resource] Published: "${asset.topic}" is now live in Study Hub`;
+
+        await client.query(
+            `INSERT INTO notifications (asset_id, message, recipient_role) VALUES ($1, $2, 'tutor')`,
+            [asset.id, msg]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, asset });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Server error' });
+    } finally {
+        client.release();
+    }
+});
+
+// GET /api/assets/free-content - Content Manager view of Free Assets
+app.get('/api/assets/free-content', authenticateToken, requireRole('content_manager', 'admin'), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT a.*, u.name as tutor_name 
+             FROM hub_assets a 
+             JOIN users u ON a.tutor_id = u.id 
+             WHERE a.asset_category = 'free_asset' 
+             ORDER BY a.created_at DESC`
+        );
+        res.json({ assets: result.rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// GET /api/hub/inventory - Centralized asset library (Week 4)
+app.get('/api/hub/inventory', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT a.*, u.name as tutor_name 
+             FROM hub_assets a 
+             JOIN users u ON a.tutor_id = u.id 
+             WHERE a.status = 'published' 
+             ORDER BY a.subject, a.asset_type`
+        );
+        res.json({ inventory: result.rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================
+// CALENDAR & SUPPORT ROUTES (Week 3)
+// ============================================
+
+// POST /api/assessments - Create assessment record
+app.post('/api/assessments', authenticateToken, requireRole('hod', 'tutor', 'admin'), async (req, res) => {
+    try {
+        const { subject, institution, type, date, campaign_window } = req.body;
+        if (!subject || !institution || !type || !date) {
+            return res.status(400).json({ error: 'Required fields missing' });
+        }
+        // Auto-calculate pressure based on days until assessment
+        const daysUntil = Math.ceil((new Date(date) - new Date()) / (1000 * 60 * 60 * 24));
+        const pressure_level = daysUntil <= 7 ? 'high' : daysUntil <= 21 ? 'medium' : 'low';
+        const result = await pool.query(
+            `INSERT INTO assessments (subject, institution, type, date, pressure_level, campaign_window, created_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [subject, institution, type, date, pressure_level, campaign_window, req.user.id]
+        );
+        res.json({ assessment: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// GET /api/assessments - List all assessments
+app.get('/api/assessments', authenticateToken, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM assessments ORDER BY date ASC');
+        res.json({ assessments: result.rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/support_sessions - Schedule session
+app.post('/api/support_sessions', authenticateToken, requireRole('tutor', 'admin'), async (req, res) => {
+    try {
+        const { subject, assessment_date, session_date, confusion_topics } = req.body;
+        if (!subject || !session_date) {
+            return res.status(400).json({ error: 'subject and session_date are required' });
+        }
+        const result = await pool.query(
+            `INSERT INTO support_sessions (subject, assessment_date, session_date, confusion_topics, scheduled_by)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [subject, assessment_date, session_date, confusion_topics, req.user.id]
+        );
+        res.json({ session: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// GET /api/support_sessions - List sessions
+app.get('/api/support_sessions', authenticateToken, async (req, res) => {
+    try {
+        const userRole = req.user.role;
+        const userId = req.user.id;
+        const { upcoming, status } = req.query;
+
+        let query = `
+            SELECT ss.*, u.name as created_by_name, u.role as creator_role 
+            FROM support_sessions ss 
+            JOIN users u ON ss.scheduled_by = u.id 
+            WHERE 1=1
+        `;
+        let params = [];
+        let paramCount = 1;
+
+        // ROLE-BASED FILTERING (Task 2.3)
+        if (userRole === 'tutor') {
+            query += ` AND ss.scheduled_by = $${paramCount}`;
+            params.push(userId);
+            paramCount++;
+        } else if (userRole === 'marketing' || userRole === 'crm') {
+            // Marketing/CRM see all sessions for coordination
+        }
+        // HOD/Admin see all
+
+        if (upcoming === 'true') {
+            query += ` AND ss.session_date >= CURRENT_DATE AND ss.status != 'completed'`;
+        }
+
+        if (status) {
+            query += ` AND ss.status = $${paramCount}`;
+            params.push(status);
+            paramCount++;
+        }
+
+        query += ' ORDER BY ss.session_date DESC';
+        const result = await pool.query(query, params);
+        res.json({ sessions: result.rows });
+    } catch (error) {
+        console.error('Error fetching sessions:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// PATCH /api/support_sessions/:id - Complete session + log gaps
+app.patch('/api/support_sessions/:id', authenticateToken, requireRole('tutor', 'admin'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        const { status, detected_gaps, post_session_log } = req.body;
+        if (status !== 'completed') return res.status(400).json({ error: 'Invalid status' });
+        if (!post_session_log || post_session_log.trim() === '') {
+            return res.status(400).json({ error: 'Post-session log is mandatory for completion' });
+        }
+
+        await client.query('BEGIN');
+        const sessionRes = await client.query(
+            `UPDATE support_sessions SET status = 'completed', detected_gaps = $2, post_session_log = $3, completed_at = NOW()
+             WHERE id = $1 RETURNING *`,
+            [id, detected_gaps || null, post_session_log]
+        );
+
+        if (sessionRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        const session = sessionRes.rows[0];
+
+        // Notify HOD + Tutor if gaps detected
+        if (detected_gaps && detected_gaps.trim() !== '') {
+            await client.query(
+                `INSERT INTO notifications (support_session_id, message, recipient_role) VALUES ($1, $2, 'hod')`,
+                [id, `⚠️ Gap Detected: ${session.student_name} (${session.subject}). Log: ${post_session_log}`]
+            );
+            await client.query(
+                `INSERT INTO notifications (support_session_id, message, recipient_role) VALUES ($1, $2, 'tutor')`,
+                [id, `⚠️ Support Session Gap logged for ${session.student_name}. Review log: ${post_session_log}`]
+            );
+        }
+
+        await client.query('COMMIT');
+        res.json({ session });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Server error' });
+    } finally {
+        client.release();
+    }
+});
+
+// ============================================
+// NOTIFICATION ROUTES (Weeks 1 & 2)
+// ============================================
+
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+        const { role } = req.query;
+        const result = await pool.query(
+            `SELECT * FROM notifications WHERE recipient_role = $1 ORDER BY created_at DESC LIMIT 50`,
+            [role || req.user.role]
+        );
+        res.json({ notifications: result.rows });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.patch('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query(
+            `UPDATE notifications SET read_status = 'read' WHERE id = $1 RETURNING *`,
+            [id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Notification not found or access denied' });
+        res.json({ notification: result.rows[0] });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// ============================================
+// SOP LINKS MANAGEMENT (Week 7.5)
+// ============================================
+
+// GET /api/sop-links
+app.get('/api/sop-links', authenticateToken, async (req, res) => {
+    try {
+        const { target_role, section, managed_by, active } = req.query;
+
+        let query = 'SELECT * FROM sop_links WHERE 1=1';
+        const params = [];
+        let paramCount = 1;
+
+        if (target_role) {
+            query += ` AND target_role = $${paramCount}`;
+            params.push(target_role);
+            paramCount++;
+        }
+
+        if (section) {
+            query += ` AND section = $${paramCount}`;
+            params.push(section);
+            paramCount++;
+        }
+
+        if (managed_by) {
+            query += ` AND managed_by = $${paramCount}`;
+            params.push(managed_by);
+            paramCount++;
+        }
+
+        if (active !== undefined) {
+            query += ` AND active = $${paramCount}`;
+            params.push(active === 'true');
+            paramCount++;
+        }
+
+        query += ' ORDER BY display_order ASC, created_at ASC';
+
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+
+    } catch (err) {
+        console.error('Error fetching SOP links:', err);
+        res.status(500).json({ error: 'Failed to fetch SOP links' });
+    }
+});
+
+// POST /api/sop-links
+app.post('/api/sop-links', authenticateToken, async (req, res) => {
+    try {
+        const { link_text, sop_url, description, target_role, section, display_order } = req.body;
+
+        if (!link_text || !sop_url || !target_role) {
+            return res.status(400).json({ error: 'link_text, sop_url, and target_role required' });
+        }
+
+        if (req.user.role !== 'hod' && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Only HOD can manage Academic SOP links' });
+        }
+
+        if (!['tutor', 'hod'].includes(target_role)) {
+            return res.status(403).json({ error: 'HOD can only manage Academic SOPs (tutor/hod)' });
+        }
+
+        if (!sop_url.startsWith('https://') && sop_url !== '#') {
+            return res.status(400).json({ error: 'SOP URL must start with https:// or be # placeholder' });
+        }
+
+        const result = await pool.query(
+            `INSERT INTO sop_links 
+       (link_text, sop_url, description, target_role, section, display_order, managed_by, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+            [link_text, sop_url, description || null, target_role, section || 'overview', display_order || 0, 'hod', req.user.id]
+        );
+
+        res.status(201).json(result.rows[0]);
+
+    } catch (err) {
+        console.error('Error creating SOP link:', err);
+        res.status(500).json({ error: 'Failed to create SOP link' });
+    }
+});
+
+// PATCH /api/sop-links/:id
+app.patch('/api/sop-links/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { link_text, sop_url, description, target_role, display_order, active } = req.body;
+
+        if (req.user.role !== 'hod' && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Only HOD can manage Academic SOP links' });
+        }
+
+        const checkResult = await pool.query(
+            'SELECT * FROM sop_links WHERE id = $1 AND managed_by = $2',
+            [id, 'hod']
+        );
+
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({ error: 'SOP link not found or not managed by HOD' });
+        }
+
+        if (sop_url && !sop_url.startsWith('https://') && sop_url !== '#') {
+            return res.status(400).json({ error: 'SOP URL must start with https:// or be # placeholder' });
+        }
+
+        const updates = [];
+        const params = [];
+        let paramCount = 1;
+
+        if (link_text !== undefined) {
+            updates.push(`link_text = $${paramCount}`);
+            params.push(link_text);
+            paramCount++;
+        }
+
+        if (sop_url !== undefined) {
+            updates.push(`sop_url = $${paramCount}`);
+            params.push(sop_url);
+            paramCount++;
+        }
+
+        if (description !== undefined) {
+            updates.push(`description = $${paramCount}`);
+            params.push(description);
+            paramCount++;
+        }
+
+        if (target_role !== undefined) {
+            if (!['tutor', 'hod'].includes(target_role)) {
+                return res.status(403).json({ error: 'HOD can only manage Academic SOPs' });
+            }
+            updates.push(`target_role = $${paramCount}`);
+            params.push(target_role);
+            paramCount++;
+        }
+
+        if (display_order !== undefined) {
+            updates.push(`display_order = $${paramCount}`);
+            params.push(display_order);
+            paramCount++;
+        }
+
+        if (active !== undefined) {
+            updates.push(`active = $${paramCount}`);
+            params.push(active);
+            paramCount++;
+        }
+
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+        updates.push(`updated_by = $${paramCount}`);
+        params.push(req.user.id);
+        paramCount++;
+
+        params.push(id);
+
+        const result = await pool.query(
+            `UPDATE sop_links SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING *`,
+            params
+        );
+
+        res.json(result.rows[0]);
+
+    } catch (err) {
+        console.error('Error updating SOP link:', err);
+        res.status(500).json({ error: 'Failed to update SOP link' });
+    }
+});
+
+// DELETE /api/sop-links/:id (soft delete)
+app.delete('/api/sop-links/:id', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (req.user.role !== 'hod' && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Only HOD can manage Academic SOP links' });
+        }
+
+        const checkResult = await pool.query(
+            'SELECT * FROM sop_links WHERE id = $1 AND managed_by = $2',
+            [id, 'hod']
+        );
+
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({ error: 'SOP link not found or not managed by HOD' });
+        }
+
+        const result = await pool.query(
+            `UPDATE sop_links 
+       SET active = false, updated_at = CURRENT_TIMESTAMP, updated_by = $1 
+       WHERE id = $2 
+       RETURNING *`,
+            [req.user.id, id]
+        );
+
+        res.json({ message: 'SOP link hidden successfully', link: result.rows[0] });
+
+    } catch (err) {
+        console.error('Error deleting SOP link:', err);
+        res.status(500).json({ error: 'Failed to delete SOP link' });
+    }
+});
+
+// GET /api/dashboard - Role-based integer metrics (Week 5)
+app.get('/api/dashboard', authenticateToken, async (req, res) => {
+    try {
+        const role = req.user.role;
+        const counts = {};
+
+        if (role === 'tutor') {
+            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE tutor_id = $1 AND status = 'pending_approval'`, [req.user.id]);
+            const assets = await pool.query(`SELECT COUNT(*) FROM hub_assets WHERE tutor_id = $1 AND status = 'pending_hod'`, [req.user.id]);
+            const sessions = await pool.query(`SELECT COUNT(*) FROM support_sessions WHERE scheduled_by = $1 AND status = 'scheduled'`, [req.user.id]);
+            counts.pending_campaigns = parseInt(campaigns.rows[0].count);
+            counts.pending_assets = parseInt(assets.rows[0].count);
+            counts.upcoming_sessions = parseInt(sessions.rows[0].count);
+        } else if (role === 'hod' || role === 'admin') {
+            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE status = 'pending_approval'`);
+            const assets = await pool.query(`SELECT COUNT(*) FROM hub_assets WHERE status = 'pending_hod'`);
+            const gaps = await pool.query(`SELECT COUNT(*) FROM support_sessions WHERE status = 'completed' AND detected_gaps IS NOT NULL AND detected_gaps != ''`);
+            counts.pending_campaign_approvals = parseInt(campaigns.rows[0].count);
+            counts.pending_asset_approvals = parseInt(assets.rows[0].count);
+            counts.unresolved_gap_logs = parseInt(gaps.rows[0].count);
+        } else if (role === 'content_manager') {
+            const assets = await pool.query(`SELECT COUNT(*) FROM hub_assets WHERE status IN ('approved', 'pending_cm')`);
+            counts.assets_to_publish = parseInt(assets.rows[0].count);
+        } else if (role === 'marketing' || role === 'crm') {
+            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE status = 'approved'`);
+            counts.approved_campaigns_ready = parseInt(campaigns.rows[0].count);
+        }
+
+        res.json({ counts });
+    } catch (error) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`🚀 TSH PORTAL Backend (Week 4) running on port ${PORT}`));

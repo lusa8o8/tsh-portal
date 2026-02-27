@@ -1,0 +1,56 @@
+{
+  "assessments": [
+    {
+      "id": "098ddc95-aec8-4e25-aa60-dfe28d9903eb",
+      "subject": "Math",
+      "institution": "Transcended Study Hub",
+      "type": "exam",
+      "date": "2026-03-14T22:00:00.000Z",
+      "pressure_level": "high",
+      "campaign_window": "Term 1 Week 8",
+      "created_by": "d830a3cf-25e1-4ec2-9e83-9c0c5ceaeda5",
+      "created_at": "2026-02-19T13:48:41.815Z"
+    },
+    {
+      "id": "66f3037e-0426-4ab5-ac25-d44314d40028",
+      "subject": "Math",
+      "institution": "University of Zambia",
+      "type": "test",
+      "date": "2026-02-27T22:00:00.000Z",
+      "pressure_level": "medium",
+      "campaign_window": "Campaign window 1st semester week 6",
+      "created_by": "3682af73-9ead-4568-8a68-9409c4364525",
+      "created_at": "2026-02-19T13:55:25.898Z"
+    }
+  ],
+  "support_sessions": [
+    {
+      "id": "4d36e325-8950-48eb-a867-b26e9bcac87f",
+      "student_name": "John Doe",
+      "subject": "Math",
+      "assessment_date": "2026-03-14T22:00:00.000Z",
+      "session_date": "2026-02-28T22:00:00.000Z",
+      "confusion_topics": "Algebraic manipulation and quadratic equations",
+      "status": "completed",
+      "detected_gaps": "Weakness in factoring large coefficients",
+      "scheduled_by": "d830a3cf-25e1-4ec2-9e83-9c0c5ceaeda5",
+      "completed_at": "2026-02-19T13:48:42.533Z",
+      "created_at": "2026-02-19T13:48:42.301Z",
+      "post_session_log": null
+    },
+    {
+      "id": "138bb561-97cb-4fb9-b548-6e8576a5a40f",
+      "student_name": "Jane Smith",
+      "subject": "Biology",
+      "assessment_date": null,
+      "session_date": "2026-03-04T22:00:00.000Z",
+      "confusion_topics": "Cell mitosis stages",
+      "status": "completed",
+      "detected_gaps": null,
+      "scheduled_by": "d830a3cf-25e1-4ec2-9e83-9c0c5ceaeda5",
+      "completed_at": "2026-02-19T14:20:33.984Z",
+      "created_at": "2026-02-19T14:20:33.722Z",
+      "post_session_log": null
+    }
+  ]
+}

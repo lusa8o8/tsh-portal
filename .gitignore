@@ -1,0 +1,11 @@
+node_modules/
+.env
+*.log
+server_log.txt
+check_schema.sql
+check_types.js
+hotfix_db_updates.sql
+migration_phase1_registration.sql
+fix_hod_asset_rls.sql
+fix_tutor_assessment_rls.sql
+tsh-erp.zip
