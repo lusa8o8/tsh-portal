@@ -844,7 +844,7 @@
         }
 
         // --- Core Rendering Engine ---
-        function renderApp() {
+        async function renderApp() {
             const root = document.getElementById('root');
             if (state.loading) {
                 root.innerHTML = '<div class="flex h-screen items-center justify-center text-gray-400">Loading...</div>';
@@ -856,7 +856,7 @@
                 return;
             }
 
-            root.innerHTML = renderDashboard();
+            root.innerHTML = await renderDashboard();
             // Initialize sidebar toggles and other dynamic behaviors
             initDashboardBehaviors();
         }
@@ -1095,7 +1095,7 @@
             // Other tab data loading will be added here
         }
 
-        function renderDashboard() {
+        async function renderDashboard() {
             const { user, currentTab, unreadCount } = state;
             const tabs = [
                 { id: 'overview', icon: '📊', label: 'Overview', roles: ['tutor', 'hod', 'admin', 'content_manager', 'marketing', 'crm'] },
@@ -1174,31 +1174,31 @@
 
                     <main class="flex-1 md:ml-[240px] p-4 md:p-8 w-full">
                         <div class="max-w-4xl mx-auto mt-12 md:mt-0">
-                            ${renderTabContent()}
+                            ${await renderTabContent()}
                         </div>
                     </main>
                 </div>
             `;
         }
 
-        function renderTabContent() {
+        async function renderTabContent() {
             const { currentTab, user } = state;
             switch (currentTab) {
-                case 'overview': return renderRoleDashboard();
-                case 'inbox': return renderInboxView();
-                case 'user-management': return renderUserManagementView();
-                case 'queue': return renderContentManagerQueue();
+                case 'overview': return await renderRoleDashboard();
+                case 'inbox': return await renderInboxView();
+                case 'user-management': return await renderUserManagementView();
+                case 'queue': return await renderContentManagerQueue();
                 case 'campaigns':
                     if (user.role === 'crm') return renderCampaignCoordination();
                     if (user.role === 'marketing') return renderMarketingCampaigns();
-                    return renderCampaignView('own');
-                case 'campaign-approvals': return renderCampaignView('approvals');
-                case 'assets': return renderAssetView();
-                case 'assessments': return renderAssessmentMap();
-                case 'sessions': return renderSupportSessions();
+                    return await renderCampaignView('own');
+                case 'campaign-approvals': return await renderCampaignView('approvals');
+                case 'assets': return await renderAssetView();
+                case 'assessments': return await renderAssessmentMap();
+                case 'sessions': return await renderSupportSessions();
                 case 'sop-management': return renderSopManagementView();
-                case 'hub': return renderSubjectHub();
-                case 'strategic': return renderAssessmentWeekView();
+                case 'hub': return await renderSubjectHub();
+                case 'strategic': return await renderAssessmentWeekView();
                 default: return renderPlaceholderView(currentTab);
             }
         }
