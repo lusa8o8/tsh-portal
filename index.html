@@ -250,7 +250,8 @@
                     {tab === 'overview' && <RoleDashboard user={user} />}
                     {tab === 'inbox' && <InboxView user={user} />}
                     {tab === 'queue' && <ContentManagerQueue user={user} />}
-                    {tab === 'campaigns' && (user.role === 'crm' ? <CampaignCoordination user={user} /> : user.role === 'marketing' ? <MarketingCampaigns user={user} /> : <CampaignView user={user} />)}
+                    {tab === 'campaigns' && (user.role === 'crm' ? <CampaignCoordination user={user} /> : user.role === 'marketing' ? <MarketingCampaigns user={user} /> : <CampaignView user={user} viewMode="my" />)}
+                    {tab === 'campaign-approvals' && <CampaignView user={user} viewMode="approvals" />}
                     {tab === 'assets' && <AssetView user={user} />}
                     {tab === 'assessments' && <AssessmentMap user={user} />}
                     {tab === 'sessions' && <SupportSessions user={user} />}
@@ -308,8 +309,8 @@
                                         </a>
                                     ))}
                                     <div class="sidebar-divider"><span class="sidebar-section-label">Management</span></div>
-                                    {[{ id: 'campaigns', icon: '✅', label: 'Campaign Approvals' }, { id: 'assets', icon: '📤', label: 'Upload Queue' }, { id: 'strategic', icon: '🗓️', label: 'Strategic View' }, { id: 'sop-management', icon: '⚙️', label: 'SOP Management' }].map(t => (
-                                        <a key={t.id + '-mgmt'} href="#" onClick={(e) => { e.preventDefault(); setTab(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
+                                    {[{ id: 'campaign-approvals', icon: '✅', label: 'Campaign Approvals' }, { id: 'assets', icon: '📤', label: 'Upload Queue' }, { id: 'strategic', icon: '🗓️', label: 'Strategic View' }, { id: 'sop-management', icon: '⚙️', label: 'SOP Management' }].map(t => (
+                                        <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); setTab(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
                                             <span class="mr-3">{t.icon}</span> {t.label}
                                         </a>
                                     ))}
@@ -1012,30 +1013,30 @@
         }
 
         // ── Campaign View (Tutor + HOD) ─────────────────────────────────────
-        function CampaignView({ user }) {
+        function CampaignView({ user, viewMode = 'my' }) {
             const [campaigns, setCampaigns] = useState([]);
             const [notifs, setNotifs] = useState([]);
             const [showNew, setShowNew] = useState(false);
             const load = () => {
-                // HOD sees only pending_approval campaigns; tutors/admins see their own
-                const params = (user.role === 'hod' || user.role === 'admin')
+                // 'approvals' mode sees pending; 'my' mode sees user's own (backend filtered)
+                const params = (viewMode === 'approvals')
                     ? { status: 'pending_approval' }
                     : {};
                 api.getCampaigns(params).then(d => setCampaigns(d.campaigns));
                 api.getNotifications(user.role).then(d => setNotifs(d.notifications));
             };
-            useEffect(load, []);
+            useEffect(load, [viewMode]);
             return (
                 <div>
-                    {user.role === 'tutor' && <button onClick={() => setShowNew(true)} class="mb-6 bg-black text-white px-4 py-2 rounded text-sm">+ New Campaign</button>}
+                    {viewMode === 'my' && <button onClick={() => setShowNew(true)} class="mb-6 bg-black text-white px-4 py-2 rounded text-sm">+ New Campaign</button>}
                     {showNew && <CampaignForm onCancel={() => setShowNew(false)} onSuccess={() => { setShowNew(false); load(); }} />}
                     <div class="space-y-4">
                         <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">
-                            {user.role === 'hod' || user.role === 'admin' ? 'Pending Approval' : 'Active Gate Queue'}
+                            {viewMode === 'approvals' ? 'Pending Approval' : 'My Campaigns'}
                         </p>
                         {campaigns.map(c => <CampaignCard key={c.id} campaign={c} userRole={user.role} onUpdate={load} />)}
                         {campaigns.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded text-gray-400">
-                            {user.role === 'hod' || user.role === 'admin' ? 'No campaigns awaiting approval.' : 'Nothing in the queue.'}
+                            {viewMode === 'approvals' ? 'No campaigns awaiting approval.' : 'No campaigns submitted.'}
                         </div>}
                     </div>
                     {notifs.length > 0 && (
@@ -1574,8 +1575,8 @@
                     <div class="flex justify-between items-start mb-2">
                         <div>
                             <span class={`text-[9px] font-black uppercase px-2 py-0.5 rounded mr-2 ${s.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>{s.status}</span>
-                            <h4 class="inline-block font-bold text-base">{s.student_name}</h4>
-                            <p class="text-xs text-gray-500">{s.subject} • Assessment: {s.assessment_date ? new Date(s.assessment_date).toLocaleDateString() : 'None'}</p>
+                            <h4 class="inline-block font-bold text-base">{s.subject}</h4>
+                            <p class="text-xs text-gray-500">Assessment: {s.assessment_date ? new Date(s.assessment_date).toLocaleDateString() : 'None'}</p>
                         </div>
                         <div class="text-right">
                             <p class="text-xs font-bold">Session: {new Date(s.session_date).toLocaleDateString()}</p>
