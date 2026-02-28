@@ -1202,20 +1202,47 @@
             const [assets, setAssets] = useState([]);
             const [notifs, setNotifs] = useState([]);
             const [showNew, setShowNew] = useState(false);
+            const [viewMode, setViewMode] = useState('all'); // 'all' vs 'mine' for HOD/Admin
+
             const load = () => {
                 api.getAssets().then(d => setAssets(d.assets));
                 api.getNotifications(user.role).then(d => setNotifs(d.notifications));
             };
             useEffect(load, []);
 
-            // HOD: only show hub_asset category assets
-            const visibleAssets = user.role === 'hod'
+            // HOD: naturally sees hub_asset category assets
+            let visibleAssets = user.role === 'hod' || user.role === 'admin'
                 ? assets.filter(a => a.asset_category === 'hub_asset')
                 : assets;
 
+            // Oversight Toggle Filter
+            if ((user.role === 'hod' || user.role === 'admin') && viewMode === 'mine') {
+                visibleAssets = visibleAssets.filter(a => a.tutor_id === user.id);
+            }
+
             return (
                 <div>
-                    {user.role === 'tutor' && <button onClick={() => setShowNew(true)} class="mb-6 bg-black text-white px-4 py-2 rounded text-sm">+ Upload Asset</button>}
+                    <div class="flex justify-between items-center mb-6">
+                        {user.role === 'tutor' && <button onClick={() => setShowNew(true)} class="bg-black text-white px-4 py-2 rounded text-sm">+ Upload Asset</button>}
+
+                        {(user.role === 'hod' || user.role === 'admin') && (
+                            <div class="flex bg-gray-100 p-1 rounded-lg">
+                                <button
+                                    onClick={() => setViewMode('all')}
+                                    class={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    Oversight: All Staff
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('mine')}
+                                    class={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'mine' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    My Uploads
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     {showNew && <AssetForm onCancel={() => setShowNew(false)} onSuccess={() => { setShowNew(false); load(); }} />}
 
                     <div class="space-y-4">
@@ -1224,9 +1251,11 @@
                                 Free class recordings go directly to Content Manager for YouTube/social repurposing. Only Study Hub materials require your review.
                             </div>
                         )}
-                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">Asset Queue</p>
+                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">
+                            {viewMode === 'mine' ? 'My Uploads' : 'Asset Queue'}
+                        </p>
                         {visibleAssets.map(a => <AssetCard key={a.id} asset={a} userRole={user.role} onUpdate={load} />)}
-                        {visibleAssets.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded text-gray-400">No assets pending review.</div>}
+                        {visibleAssets.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded text-gray-400">No assets found.</div>}
                     </div>
 
                     {notifs.length > 0 && (
