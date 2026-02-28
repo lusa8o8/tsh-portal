@@ -1261,35 +1261,25 @@
             const { user, dashboardData: counts, sopLinks } = state;
             if (!counts) return '<div class="text-center py-12 text-gray-400 text-sm">Loading dashboard...</div>';
 
-            const metricsHtml = Object.entries(counts).map(([key, count]) => {
-                let hint = '';
-                const idStr = key.replace(/_/g, '-').toLowerCase() + '-count';
+            const labels = {
+                pending_campaigns: { label: 'Pending Campaigns', hint: 'Awaiting HOD review' },
+                pending_assets: { label: 'Pending Assets', hint: 'Awaiting CM approval' },
+                upcoming_sessions: { label: 'Upcoming Sessions', hint: 'Next 7 days' },
+                pending_campaign_approvals: { label: 'Campaign Approvals', hint: 'Action required' },
+                pending_asset_approvals: { label: 'Asset Approvals', hint: 'Action required' },
+                unresolved_gap_logs: { label: 'Unresolved Gaps', hint: 'Action required' }
+            };
 
-                if (user.role === 'tutor') {
-                    if (key === 'pending_campaigns') hint = '<small class="metric-hint metric-hint-neutral">Waiting for HOD review</small>';
-                    else if (key === 'pending_assets') hint = '<small class="metric-hint metric-hint-neutral">Awaiting CM approval</small>';
-                    else if (key === 'upcoming_sessions') hint = `<small class="metric-hint metric-hint-action"><a href="#" onclick="event.preventDefault(); setTab('sessions');">View schedule →</a></small>`;
-                } else if (isHODOrAdmin(user)) {
-                    if (key === 'pending_campaign_approvals') {
-                        hint = count > 0
-                            ? `<small class="metric-hint metric-hint-action"><a href="#" onclick="event.preventDefault(); setTab('campaigns');">Review ${count} campaign${count > 1 ? 's' : ''} →</a></small>`
-                            : '<small class="metric-hint metric-hint-success">✓ All campaigns reviewed</small>';
-                    } else if (key === 'pending_asset_approvals') {
-                        hint = count > 0
-                            ? `<small class="metric-hint metric-hint-action"><a href="#" onclick="event.preventDefault(); setTab('queue');">Review ${count} asset${count > 1 ? 's' : ''} →</a></small>`
-                            : '<small class="metric-hint metric-hint-success">✓ All assets reviewed</small>';
-                    } else if (key === 'unresolved_gap_logs') {
-                        hint = count > 0
-                            ? `<small class="metric-hint metric-hint-action"><a href="#" onclick="event.preventDefault(); setTab('sessions');">Review gaps →</a></small>`
-                            : '<small class="metric-hint metric-hint-success">No urgent student issues</small>';
-                    }
-                }
+            const metricsHtml = Object.entries(counts).map(([key, count]) => {
+                const label = labels[key] || { label: key.replace(/_/g, ' '), hint: '' };
+                const idStr = `metric-${key.replace(/_/g, '-')}`;
+                const hintValue = label.hint ? `<p class="text-[8px] text-gray-400 mt-1 uppercase font-black tracking-tighter">${label.hint}</p>` : '';
 
                 return `
-                    <div class="metric-card p-6 bg-white border rounded-xl shadow-sm text-center flex flex-col justify-center h-32">
-                        <div id="${idStr}" class="text-4xl font-black mb-2 tracking-tighter">${count}</div>
-                        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">${key.replace(/_/g, ' ')}</div>
-                        ${hint}
+                    <div class="metric-card p-6 bg-white border rounded-xl shadow-sm text-center flex flex-col justify-center h-40">
+                        <div id="${idStr}" class="text-5xl font-black mb-1 tracking-tighter">${count}</div>
+                        <div class="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-tight">${label.label}</div>
+                        <div class="mt-2">${hintValue}</div>
                     </div>
                 `;
             }).join('');
@@ -1302,38 +1292,80 @@
                     </div>
 
                     ${user.role === 'tutor' ? `
-                        <div class="mt-8">
+                        <div class="mt-8 space-y-8">
                             <div class="quick-start">
                                 <h1 class="text-2xl font-black tracking-tight mb-2">Getting Started</h1>
                                 <p class="intro-text">Welcome to TSH PORTAL! This page explains how to use the system.</p>
-                                <div class="instruction-section">
-                                    <h3 class="section-title">📢 Campaign Management</h3>
-                                    <ul class="help-list">
-                                        <li><strong>Submit:</strong> <span class="action-path">Campaigns → "+ New"</span></li>
-                                        <li><strong>Review:</strong> <span class="action-path">Campaigns → Status badge</span></li>
-                                    </ul>
-                                </div>
-                                <div class="instruction-section">
-                                    <h3 class="section-title">📤 Content & Materials</h3>
-                                    <ul class="help-list">
-                                        <li><strong>Upload:</strong> <span class="action-path">Upload Queue → "+ Asset"</span></li>
-                                    </ul>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">📢 Campaign Management</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>Submit:</strong> <span class="action-path">Campaigns → "+ New"</span></li>
+                                            <li><strong>Review:</strong> <span class="action-path">Campaigns → Status badge</span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">📤 Content & Materials</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>Upload:</strong> <span class="action-path">Upload Queue → "+ Asset"</span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">📅 Academic Planning</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>Assessment Map:</strong> <span class="action-path">Map → "+ Add Assessment"</span></li>
+                                            <li><strong>Strategic View:</strong> <span class="action-path">View → Review weekly pressure</span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">🎯 Student Support</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>Schedule Log:</strong> <span class="action-path">Support Sessions → "+ Log Session"</span></li>
+                                            <li><strong>Gaps/Outcomes:</strong> <span class="action-path">Sessions → "Complete" → Identify Gaps</span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">📚 Knowledge Base</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>Study Hub:</strong> <span class="action-path">Hub → Browse published assets</span></li>
+                                            <li><strong>Inbox:</strong> <span class="action-path">Inbox → Check task escalations</span></li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     ` : ''}
 
                     ${isHODOrAdmin(user) ? `
-                        <div class="mt-8">
+                        <div class="mt-8 space-y-8">
                             <div class="quick-start">
                                 <h1 class="text-2xl font-black tracking-tight mb-2">Management Oversight</h1>
                                 <p class="intro-text">Review tutor work and manage capacity.</p>
-                                <div class="instruction-section">
-                                    <h3 class="section-title">⚙️ Review & Approvals</h3>
-                                    <ul class="help-list">
-                                        <li><strong>Campaigns:</strong> <span class="action-path">Management → Campaign Approvals</span></li>
-                                        <li><strong>SOPs:</strong> <span class="action-path">Management → SOP Management</span></li>
-                                    </ul>
+                                
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">⚙️ Review & Approvals</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>Campaigns:</strong> <span class="action-path">Management → Campaign Approvals</span></li>
+                                            <li><strong>Tutor Assets:</strong> <span class="action-path">Upload Queue → "Tutor Oversight" Toggle</span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">🎓 Teaching Functions</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>My Campaigns:</strong> <span class="action-path">Teaching → My Campaigns</span></li>
+                                            <li><strong>Assessment Map:</strong> <span class="action-path">Teaching → Assessment Map</span></li>
+                                            <li><strong>Strategic View:</strong> <span class="action-path">Management → Strategic View</span></li>
+                                        </ul>
+                                    </div>
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">📋 Governance</h3>
+                                        <ul class="help-list text-sm">
+                                            <li><strong>SOP Management:</strong> <span class="action-path">Management → SOP Management</span></li>
+                                            <li><strong>Inbox:</strong> <span class="action-path">Inbox → Monitor gap escalations</span></li>
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1362,7 +1394,6 @@
             if (!state.users) {
                 state.users = await api.getUsers({ status: state.userFilter === 'pending' ? 'pending' : '' });
             }
-
             const { users, userFilter, userErr } = state;
 
             return `
@@ -1470,98 +1501,98 @@
             const user = state.user;
 
             return `
-                    <div class="space-y-6">
-                        <div class="flex justify-between items-center">
-                            <h2 class="font-black text-xl italic uppercase tracking-tighter">${viewMode === 'approvals' ? 'Campaign Approvals' : 'My Campaigns'}</h2>
-                            ${viewMode === 'own' && (user.role === 'tutor' || user.role === 'admin') ? `
-                                <button onclick="window.showNewCampaignForm = true; renderApp();" class="bg-black text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-gray-800 transition-colors">
-                                    + New Campaign
-                                </button>
-                            ` : ''}
-                        </div>
-
-                        ${window.showNewCampaignForm ? renderCampaignForm() : ''}
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            ${campaigns.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No campaigns found.</div>' : ''}
-                            ${campaigns.map(c => `
-                                <div class="p-6 bg-white border rounded-xl shadow-sm space-y-4">
-                                    <div class="flex justify-between items-start">
-                                        <div>
-                                            <span class="text-[8px] font-black px-2 py-0.5 rounded bg-gray-50 text-gray-400 uppercase">${c.subject}</span>
-                                            <h3 class="font-bold text-lg mt-1">${c.topic}</h3>
-                                        </div>
-                                        <span class="text-[10px] font-black uppercase px-2 py-1 rounded border ${c.status === 'approved' ? 'bg-green-50 text-green-600 border-green-100' : c.status === 'rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-orange-50 text-orange-600 border-orange-100'}">
-                                            ${c.status}
-                                        </span>
-                                    </div>
-                                    <div class="text-xs text-gray-600 space-y-1">
-                                        <p><strong>Target Date:</strong> ${new Date(c.target_date).toLocaleDateString()}</p>
-                                        <p><strong>Outcomes:</strong> ${c.outcomes || '—'}</p>
-                                    </div>
-                                    ${viewMode === 'approvals' && (c.status === 'pending' || c.status === 'pending_hod') ? `
-                                        <div class="pt-4 border-t flex gap-2">
-                                            <button onclick="handleCampaignAction(${c.id}, 'approved')" class="flex-1 bg-green-600 text-white py-2 rounded text-[10px] font-black uppercase hover:bg-green-700 transition-colors">Approve</button>
-                                            <button onclick="handleCampaignAction(${c.id}, 'rejected')" class="flex-1 bg-red-600 text-white py-2 rounded text-[10px] font-black uppercase hover:bg-red-700 transition-colors">Reject</button>
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-black text-xl italic uppercase tracking-tighter">${viewMode === 'approvals' ? 'Campaign Approvals' : 'My Campaigns'}</h2>
+                        ${viewMode === 'own' && (user.role === 'tutor' || user.role === 'admin') ? `
+                            <button onclick="window.showNewCampaignForm = true; renderApp();" class="bg-black text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-gray-800 transition-colors">
+                                + New Campaign
+                            </button>
+                        ` : ''}
                     </div>
-                `;
+
+                    ${window.showNewCampaignForm ? renderCampaignForm() : ''}
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${campaigns.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No campaigns found.</div>' : ''}
+                        ${campaigns.map(c => `
+                            <div class="p-6 bg-white border rounded-xl shadow-sm space-y-4">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <span class="text-[8px] font-black px-2 py-0.5 rounded bg-gray-50 text-gray-400 uppercase">${c.subject}</span>
+                                        <h3 class="font-bold text-lg mt-1">${c.topic}</h3>
+                                    </div>
+                                    <span class="text-[10px] font-black uppercase px-2 py-1 rounded border ${c.status === 'approved' ? 'bg-green-50 text-green-600 border-green-100' : c.status === 'rejected' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-orange-50 text-orange-600 border-orange-100'}">
+                                        ${c.status}
+                                    </span>
+                                </div>
+                                <div class="text-xs text-gray-600 space-y-1">
+                                    <p><strong>Target:</strong> ${new Date(c.target_date).toLocaleDateString()} ${c.target_time || ''}</p>
+                                    <p><strong>Outcomes:</strong> ${c.outcomes || '—'}</p>
+                                </div>
+                                ${viewMode === 'approvals' && (c.status === 'pending_approval' || c.status === 'pending_hod') ? `
+                                    <div class="pt-4 border-t flex gap-2">
+                                        <button onclick="handleCampaignAction(${c.id}, 'approved')" class="flex-1 bg-green-600 text-white py-2 rounded text-[10px] font-black uppercase hover:bg-green-700 transition-colors">Approve</button>
+                                        <button onclick="handleCampaignAction(${c.id}, 'rejected')" class="flex-1 bg-red-600 text-white py-2 rounded text-[10px] font-black uppercase hover:bg-red-700 transition-colors">Reject</button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
         }
 
         function renderCampaignForm() {
             return `
-                    <div class="mb-8 p-6 bg-white border rounded-2xl shadow-sm">
-                        <h3 class="font-bold mb-4 italic text-gray-800">Campaign Intake</h3>
-                        <form onsubmit="handleCreateCampaign(event)" class="space-y-4">
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
-                                    <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-                                </div>
-                                <div class="grid grid-cols-2 gap-2">
-                                    <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Target Date</label>
-                                        <input type="date" name="target_date" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-                                    </div>
-                                    <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Target Time</label>
-                                        <input type="time" name="target_time" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
-                                    </div>
-                                </div>
-                            </div>
-                            
+                <div class="mb-8 p-6 bg-white border rounded-2xl shadow-sm">
+                    <h3 class="font-bold mb-4 italic text-gray-800">Campaign Intake</h3>
+                    <form onsubmit="handleCreateCampaign(event)" class="space-y-4">
+                        <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-1">
-                                <label class="text-[10px] font-bold text-gray-400 uppercase">Campaign Topic</label>
-                                <input type="text" name="topic" placeholder="e.g. Calculus Differentiation" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
+                                <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
                             </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Target Date</label>
+                                    <input type="date" name="target_date" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Target Time</label>
+                                    <input type="time" name="target_time" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Campaign Topic</label>
+                            <input type="text" name="topic" placeholder="e.g. Calculus Differentiation" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                        </div>
 
-                            <div class="space-y-1 relative">
-                                <label class="text-[10px] font-bold text-gray-400 uppercase">Examiner Trick/Pattern</label>
-                                <textarea name="trick_pattern" maxlength="500" placeholder="Describe the common examiner traps..." 
-                                    oninput="document.getElementById('trick-count').innerText = this.value.length + '/500'"
-                                    class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all h-20" rows="2"></textarea>
-                                <span id="trick-count" class="absolute right-2 bottom-2 text-[9px] text-gray-400">0/500</span>
-                            </div>
+                        <div class="space-y-1 relative">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Examiner Trick/Pattern</label>
+                            <textarea name="trick_pattern" maxlength="500" placeholder="Describe the common examiner traps..." 
+                                oninput="document.getElementById('trick-count').innerText = this.value.length + '/500'"
+                                class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all h-20" rows="2"></textarea>
+                            <span id="trick-count" class="absolute right-2 bottom-2 text-[9px] text-gray-400">0/500</span>
+                        </div>
 
-                            <div class="space-y-1 relative">
-                                <label class="text-[10px] font-bold text-gray-400 uppercase">Target Learning Outcomes</label>
-                                <textarea name="outcomes" maxlength="500" placeholder="What will students master?" required
-                                    oninput="document.getElementById('outcomes-count').innerText = this.value.length + '/500'"
-                                    class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all h-20" rows="2"></textarea>
-                                <span id="outcomes-count" class="absolute right-2 bottom-2 text-[9px] text-gray-400">0/500</span>
-                            </div>
+                        <div class="space-y-1 relative">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Target Learning Outcomes</label>
+                            <textarea name="outcomes" maxlength="500" placeholder="What will students master?" required
+                                oninput="document.getElementById('outcomes-count').innerText = this.value.length + '/500'"
+                                class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all h-20" rows="2"></textarea>
+                            <span id="outcomes-count" class="absolute right-2 bottom-2 text-[9px] text-gray-400">0/500</span>
+                        </div>
 
-                            <div class="flex gap-3 pt-2">
-                                <button type="submit" id="submit-campaign-btn" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm">Submit to HOD</button>
-                                <button type="button" onclick="window.showNewCampaignForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                `;
+                        <div class="flex gap-3 pt-2">
+                            <button type="submit" id="submit-campaign-btn" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm">Submit to HOD</button>
+                            <button type="button" onclick="window.showNewCampaignForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            `;
         }
 
         window.handleCreateCampaign = async (e) => {
@@ -1597,92 +1628,113 @@
         // ── Asset View (Week 2 & 7) ──────────────────────────────────────────
         async function renderAssetView() {
             if (!state.assets) {
-                const d = await api.getAssets();
+                const params = {};
+                if (isHODOrAdmin(state.user) && state.assetViewMode === 'oversight') {
+                    params.mode = 'oversight';
+                }
+                const d = await api.getAssets(params);
                 state.assets = d.assets || [];
             }
-            const { assets } = state;
+            const { assets, user } = state;
 
             return `
-                    <div class="space-y-6">
-                        <div class="flex justify-between items-center">
-                            <h2 class="font-black text-xl italic uppercase tracking-tighter">Asset Upload Queue</h2>
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-black text-xl italic uppercase tracking-tighter">Asset Upload Queue</h2>
+                        <div class="flex items-center gap-3">
+                            ${isHODOrAdmin(user) ? `
+                                <div class="flex bg-gray-100 p-1 rounded-lg">
+                                    <button onclick="setAssetViewMode('own')" class="px-3 py-1 text-[10px] font-bold uppercase rounded ${state.assetViewMode !== 'oversight' ? 'bg-white shadow-sm' : 'text-gray-500'}">Own</button>
+                                    <button onclick="setAssetViewMode('oversight')" class="px-3 py-1 text-[10px] font-bold uppercase rounded ${state.assetViewMode === 'oversight' ? 'bg-white shadow-sm' : 'text-gray-500'}">Tutor Oversight</button>
+                                </div>
+                            ` : ''}
                             <button onclick="window.showNewAssetForm = true; renderApp();" class="bg-black text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-gray-800 transition-colors">
                                 + Upload Asset
                             </button>
                         </div>
-
-                        ${window.showNewAssetForm ? renderAssetForm() : ''}
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            ${assets.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No assets uploaded.</div>' : ''}
-                            ${assets.map(a => `
-                                <div class="p-6 bg-white border rounded-xl shadow-sm space-y-3 relative overflow-hidden">
-                                    <div class="absolute top-0 right-0 p-3 bg-gray-50 border-b border-l text-[8px] font-black uppercase text-gray-400">${a.asset_type}</div>
-                                    <div>
-                                        <p class="text-[10px] font-bold text-blue-500 uppercase mb-1">${a.subject}</p>
-                                        <h3 class="font-bold">${a.topic}</h3>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-[10px] uppercase font-black px-2 py-0.5 border rounded-full ${a.status === 'published' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-gray-50 text-gray-400'}">${a.status}</span>
-                                        <a href="${a.drive_link}" target="_blank" class="text-[10px] font-black text-blue-600 hover:underline">Link ↗</a>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
                     </div>
-                `;
+
+                    ${window.showNewAssetForm ? renderAssetForm() : ''}
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${assets.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No assets found.</div>' : ''}
+                        ${assets.map(a => `
+                            <div class="p-6 bg-white border rounded-xl shadow-sm space-y-3 relative overflow-hidden">
+                                <div class="absolute top-0 right-0 p-3 bg-gray-50 border-b border-l text-[8px] font-black uppercase text-gray-400">${a.asset_type}</div>
+                                <div>
+                                    <p class="text-[10px] font-bold text-blue-500 uppercase mb-1">${a.subject}</p>
+                                    <h3 class="font-bold">${a.topic}</h3>
+                                    ${a.uploader_name ? `<p class="text-[8px] text-gray-400 uppercase font-bold">Uploaded by: ${a.uploader_name}</p>` : ''}
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] uppercase font-black px-2 py-0.5 border rounded-full ${a.status === 'published' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-gray-50 text-gray-400'}">${a.status}</span>
+                                    <a href="${a.drive_link}" target="_blank" class="text-[10px] font-black text-blue-600 hover:underline">Link ↗</a>
+                                </div>
+                                ${isHODOrAdmin(user) && a.status === 'pending_hod' ? `
+                                    <div class="pt-3 border-t flex gap-2">
+                                        <button onclick="handleAssetAction(${a.id}, 'approved')" class="flex-1 bg-green-600 text-white py-1 rounded text-[8px] font-black uppercase">Approve</button>
+                                        <button onclick="handleAssetAction(${a.id}, 'rejected')" class="flex-1 bg-red-600 text-white py-1 rounded text-[8px] font-black uppercase">Reject</button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
         }
 
+        window.setAssetViewMode = (mode) => {
+            state.assetViewMode = mode;
+            state.assets = null;
+            renderApp();
+        };
+
+        window.handleAssetAction = async (id, status) => {
+            try {
+                await api.updateAsset(id, { status });
+                state.assets = null;
+                renderApp();
+            } catch (e) { alert(e.message); }
+        };
+
         function renderAssetForm() {
-            const categories = [
-                { id: 'free_asset', title: '📹 Free Class Content', desc: 'YouTube/Social repurposing' },
-                { id: 'hub_asset', title: '📚 Hub Resource', desc: 'Study Hub material - requires review' }
-            ];
             const assetTypes = [
-                { id: 'slides', label: 'Slides' },
-                { id: 'worksheet', label: 'Worksheet' },
-                { id: 'recording', label: 'Recording' },
+                { id: 'slides', label: 'Lesson Slides' },
+                { id: 'worksheet', label: 'Class Worksheet' },
+                { id: 'recording', label: 'Lesson Recording' },
                 { id: 'marking_key', label: 'Marking Key' },
                 { id: 'practice_bank', label: 'Practice Bank' },
-                { id: 'other', label: 'Other' }
+                { id: 'other', label: 'Other Resource' }
             ];
 
             return `
-                <div class="mb-8 p-6 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                <div class="mb-8 p-6 bg-white border rounded-2xl shadow-sm">
                     <h3 class="font-bold mb-4 italic text-gray-800">Asset Submission</h3>
-                    <form onsubmit="handleCreateAsset(event)" class="space-y-6">
-                        <!-- Category Selection -->
-                        <div class="space-y-3">
-                            <label class="block text-[10px] font-bold text-gray-400 uppercase">Asset Category <span class="text-red-500">*</span></label>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                ${categories.map(c => `
-                                    <label class="flex items-start gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 bg-white transition-colors has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
-                                        <input type="radio" name="asset_category" value="${c.id}" class="mt-1 accent-blue-600" required onchange="updateAssetFormGuidance('${c.id}')" />
-                                        <div>
-                                            <span class="font-bold text-sm block">${c.title}</span>
-                                            <span class="text-[10px] text-gray-500 block uppercase">${c.desc}</span>
-                                        </div>
-                                    </label>
-                                `).join('')}
-                            </div>
-                            <div id="asset-form-guidance" class="hidden mt-2 p-3 rounded-lg text-xs"></div>
-                        </div>
-
+                    <form onsubmit="handleCreateAsset(event)" class="space-y-4">
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-1">
-                                <label class="text-[10px] font-bold text-gray-400 uppercase">Subject</label>
-                                <input type="text" name="subject" placeholder="e.g. Math" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                                <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
+                                <input type="text" name="subject" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. Mathematics" />
                             </div>
                             <div class="space-y-1">
                                 <label class="text-[10px] font-bold text-gray-400 uppercase">Topic</label>
-                                <input type="text" name="topic" placeholder="e.g. Fractions" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                                <input type="text" name="topic" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. Algebra" />
                             </div>
                         </div>
 
-                        <!-- Asset Types Multi-select -->
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Asset Category</label>
+                            <select name="asset_category" required onchange="updateAssetFormGuidance(this.value)" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none">
+                                <option value="hub_asset">Hub Resource (High Quality)</option>
+                                <option value="free_asset">Free Class Content</option>
+                            </select>
+                        </div>
+
+                        <div id="asset-form-guidance" class="p-3 rounded-lg text-xs hidden animate-pulse"></div>
+
                         <div class="space-y-3">
-                            <label class="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Select Item Types & Provide Links</label>
-                            <div class="space-y-3">
+                            <p class="text-[10px] font-bold text-gray-400 uppercase">Resource Links</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 ${assetTypes.map(t => `
                                     <div class="space-y-2">
                                         <label class="flex items-center gap-2 cursor-pointer group">
@@ -1697,7 +1749,6 @@
                             </div>
                         </div>
 
-                        <!-- Tutor Notes -->
                         <div class="space-y-1 relative">
                             <label class="text-[10px] font-bold text-gray-400 uppercase">Tutor Notes (Optional)</label>
                             <textarea name="tutor_notes" maxlength="300" placeholder="Instructions: timestamps, context, things to skip..." 
@@ -1720,11 +1771,11 @@
             if (!el) return;
             el.classList.remove('hidden', 'bg-blue-50', 'text-blue-800', 'bg-green-50', 'text-green-800', 'border', 'border-blue-200', 'border-green-200');
             if (cat === 'free_asset') {
-                el.innerHTML = `<strong>Selected: Free Class Content</strong><p class="mt-1">→ Goes directly to Content Manager for YouTube/Social repurposing. No further review required.</p>`;
-                el.classList.add('bg-blue-50', 'text-blue-800', 'border', 'border-blue-200');
+                el.innerHTML = `<strong>Selected: Free Class Content</strong> <p class="mt-1">→ Goes directly to Content Manager for YouTube/Social repurposing. No further review required.</p>`;
+                el.classList.add('bg-blue-50', 'text-blue-800', 'border', 'border-blue-200', 'block');
             } else {
-                el.innerHTML = `<strong>Selected: Hub Resource</strong><p class="mt-1">→ Quality review by Content Manager before publishing to Study Hub. You'll be notified of progress.</p>`;
-                el.classList.add('bg-green-50', 'text-green-800', 'border', 'border-green-200');
+                el.innerHTML = `<strong>Selected: Hub Resource</strong> <p class="mt-1">→ Quality review by Content Manager before publishing to Study Hub. You'll be notified of progress.</p>`;
+                el.classList.add('bg-green-50', 'text-green-800', 'border', 'border-green-200', 'block');
             }
         };
 
@@ -1745,8 +1796,7 @@
         window.handleCreateAsset = async (e) => {
             e.preventDefault();
             const btn = document.getElementById('submit-asset-btn');
-            if (btn) btn.disabled = true;
-            if (btn) btn.innerText = 'Uploading...';
+            if (btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
 
             try {
                 const fd = new FormData(e.target);
@@ -1756,27 +1806,24 @@
                 const category = formData.asset_category;
                 const notes = formData.tutor_notes;
 
-                // Collect all selected asset types and their links
                 const assetTypes = ['slides', 'worksheet', 'recording', 'marking_key', 'practice_bank', 'other'];
                 const batch = [];
 
                 assetTypes.forEach(type => {
                     const link = formData[`link_${type}`];
-                    if (link && link.trim() !== '') {
+                    if (link) {
                         batch.push({
                             subject,
                             topic,
                             asset_type: type,
                             drive_link: link,
                             asset_category: category,
-                            tutor_notes: notes || null
+                            tutor_notes: notes
                         });
                     }
                 });
 
-                if (batch.length === 0) {
-                    throw new Error('Please select at least one asset type and provide a link.');
-                }
+                if (batch.length === 0) throw new Error('Please select at least one resource to upload.');
 
                 await api.createAsset(batch);
                 window.showNewAssetForm = false;
@@ -1784,12 +1831,10 @@
                 renderApp();
             } catch (e) {
                 alert(e.message);
-                if (btn) btn.disabled = false;
-                if (btn) btn.innerText = 'Upload to Queue';
+                if (btn) { btn.disabled = false; btn.innerText = 'Upload to Queue'; }
             }
         };
 
-        // ── Assessment Map (Week 3 & 7) ─────────────────────────────────────────────
         async function renderAssessmentMap() {
             if (!state.assessments) {
                 const d = await api.getAssessments();
@@ -1798,91 +1843,105 @@
             const { assessments } = state;
 
             return `
-                    <div class="space-y-6">
-                        <div class="flex justify-between items-center">
-                            <h2 class="font-black text-xl italic uppercase tracking-tighter">Strategic Assessment Map</h2>
-                            <button onclick="window.showNewAssessmentForm = true; renderApp();" class="bg-red-600 text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-red-700 transition-colors">
-                                + Add Assessment
-                            </button>
-                        </div>
-
-                        ${window.showNewAssessmentForm ? `
-                            <div class="mb-8 p-6 bg-red-50 border border-red-100 rounded-2xl shadow-sm">
-                                <h3 class="font-black text-sm uppercase mb-4 text-red-900">Log Upcoming Assessment Milestone</h3>
-                                <form onsubmit="handleCreateAssessment(event)" class="space-y-4">
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div class="space-y-1">
-                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
-                                            <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
-                                        </div>
-                                        <div class="space-y-1">
-                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Institution</label>
-                                            <input type="text" name="institution" placeholder="e.g. Cambridge, CAPS" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="grid grid-cols-3 gap-4">
-                                        <div class="space-y-1">
-                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Type</label>
-                                            <select name="type" required class="w-full p-2.5 border rounded-lg text-sm bg-white">
-                                                <option value="exam">Exam</option>
-                                                <option value="test">Test</option>
-                                                <option value="quiz">Quiz</option>
-                                                <option value="mock">Mock</option>
-                                                <option value="topic">Topic Test</option>
-                                            </select>
-                                        </div>
-                                        <div class="space-y-1">
-                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Assessment Date</label>
-                                            <input type="date" name="date" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
-                                        </div>
-                                        <div class="space-y-1">
-                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Prep Window</label>
-                                            <input type="text" name="campaign_window" placeholder="e.g. 2 weeks" class="w-full p-2.5 border rounded-lg text-sm bg-white" />
-                                        </div>
-                                    </div>
-
-                                    <div class="flex gap-3 pt-2">
-                                        <button type="submit" class="flex-1 bg-red-600 text-white p-3 rounded-lg font-bold text-sm hover:bg-red-700 transition-colors shadow-sm">Pin to Map</button>
-                                        <button type="button" onclick="window.showNewAssessmentForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
-                                    </div>
-                                </form>
-                            </div>
-                        ` : ''}
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            ${assessments.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No assessments found.</div>' : ''}
-                            ${assessments.map(a => `
-                                <div class="p-6 bg-white border rounded-xl shadow-sm space-y-3">
-                                    <div class="flex justify-between items-start">
-                                        <span class="text-[8px] font-black px-2 py-0.5 rounded bg-red-50 text-red-600 uppercase tracking-widest">${a.type}</span>
-                                        <span class="text-[8px] font-bold text-gray-400 uppercase">${a.institution}</span>
-                                    </div>
-                                    <h4 class="font-bold text-lg">${a.subject}</h4>
-                                    <div class="flex items-center gap-2 text-xs font-black text-red-900 bg-red-50 p-2 rounded-lg">
-                                        <span>📅</span> ${new Date(a.date).toLocaleDateString()}
-                                    </div>
-                                    ${a.campaign_window ? `<p class="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Window: ${a.campaign_window}</p>` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-black text-xl italic uppercase tracking-tighter">Academic Assessment Map</h2>
+                        <button onclick="window.showNewAssessmentForm = true; renderApp();" class="bg-black text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-gray-800 transition-colors">
+                            + Add Assessment
+                        </button>
                     </div>
-                `;
+
+                    ${window.showNewAssessmentForm ? `
+                        <div class="mb-8 p-6 bg-white border rounded-2xl shadow-sm">
+                            <h3 class="font-bold mb-4 italic text-gray-800">New Assessment Entry</h3>
+                            <form onsubmit="handleCreateAssessment(event)" class="space-y-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
+                                        <input type="text" name="subject" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. Mathematics" />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Assessment Type</label>
+                                        <select name="type" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none">
+                                            <option value="Exam">Exam</option>
+                                            <option value="Test">Test</option>
+                                            <option value="Quiz">Quiz</option>
+                                            <option value="Mock">Mock</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Date</label>
+                                        <input type="date" name="date" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Institution</label>
+                                        <input type="text" name="institution" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. IEB, CAPS" />
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Campaign Window (Preview Topics)</label>
+                                    <input type="text" name="campaign_window" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. Calculus Basics, Trigonometry" />
+                                </div>
+                                <div class="flex gap-3 pt-2">
+                                    <button type="submit" id="submit-assessment-btn" class="flex-1 bg-black text-white p-3 rounded-lg font-bold text-sm hover:bg-gray-800">Save Assessment</button>
+                                    <button type="button" onclick="window.showNewAssessmentForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    ` : ''}
+
+                    <div class="bg-white border rounded-xl shadow-sm overflow-hidden">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Date Range</th>
+                                    <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Subject/Course</th>
+                                    <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Assessment</th>
+                                    <th class="px-6 py-4 text-right font-black uppercase text-[10px] text-gray-400">Pressure</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${assessments.length === 0 ? '<tr><td colspan="4" class="px-6 py-10 text-center text-gray-400 italic">No assessments mapped yet.</td></tr>' : ''}
+                                ${assessments.map(a => `
+                                    <tr class="hover:bg-gray-50 transition-colors">
+                                        <td class="px-6 py-4 font-mono text-[10px] text-gray-400">${new Date(a.date).toLocaleDateString()}</td>
+                                        <td class="px-6 py-4 font-black text-blue-600">${a.subject}</td>
+                                        <td class="px-6 py-4">
+                                            <div class="font-bold">${a.type}</div>
+                                            <div class="text-[10px] text-gray-400 uppercase font-bold">${a.institution}</div>
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <span class="text-[10px] uppercase font-black px-2 py-0.5 border rounded-full ${a.pressure_level === 'high' ? 'bg-red-50 text-red-600 border-red-100' : a.pressure_level === 'medium' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-green-50 text-green-600 border-green-100'}">${a.pressure_level}</span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         }
 
         window.handleCreateAssessment = async (e) => {
             e.preventDefault();
-            const fd = new FormData(e.target);
-            const data = Object.fromEntries(fd);
+            const btn = document.getElementById('submit-assessment-btn');
+            if (btn) { btn.disabled = true; btn.innerText = 'Saving...'; }
+
             try {
+                const fd = new FormData(e.target);
+                const data = Object.fromEntries(fd);
                 await api.createAssessment(data);
                 window.showNewAssessmentForm = false;
                 state.assessments = null;
                 renderApp();
-            } catch (e) { alert(e.message); }
+            } catch (e) {
+                alert(e.message);
+                if (btn) { btn.disabled = false; btn.innerText = 'Save Assessment'; }
+            }
         };
 
-        // ── Support Sessions (Week 3 & 7) ───────────────────────────────────────────
         async function renderSupportSessions() {
             if (!state.sessions) {
                 const d = await api.getSessions();
@@ -1891,75 +1950,84 @@
             const { sessions } = state;
 
             return `
-                    <div class="space-y-6">
-                        <div class="flex justify-between items-center">
-                            <h2 class="font-black text-xl italic uppercase tracking-tighter">Support & Gap Logs</h2>
-                            <button onclick="window.showNewSessionForm = true; renderApp();" class="bg-blue-600 text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-blue-700 transition-colors">
-                                + Log Support Session
-                            </button>
-                        </div>
-
-                        ${window.showNewSessionForm ? `
-                            <div class="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-2xl shadow-sm">
-                                <h3 class="font-black text-sm uppercase mb-4 text-blue-900">New Support Session Log</h3>
-                                <form onsubmit="handleCreateSession(event)" class="space-y-4">
-                                    <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
-                                        <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
-                                    
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div class="space-y-1">
-                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Session Date</label>
-                                            <input type="date" name="session_date" required class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                                        </div>
-                                        <div class="space-y-1">
-                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Target Assessment Date</label>
-                                            <input type="date" name="assessment_date" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                                        </div>
-                                    </div>
-
-                                    <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Confusion Topics / Learning Gaps</label>
-                                        <textarea name="confusion_topics" placeholder="Describe what the student found challenging..." required 
-                                            class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none h-24"></textarea>
-                                    </div>
-
-                                    <div class="flex gap-3 pt-2">
-                                        <button type="submit" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm">Save Log</button>
-                                        <button type="button" onclick="window.showNewSessionForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
-                                    </div>
-                                </form>
-                            </div>
-                        ` : ''}
-
-                        <div class="grid grid-cols-1 gap-4">
-                            ${sessions.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No support sessions logged.</div>' : ''}
-                            ${sessions.map(s => `
-                                <div class="p-5 bg-white border rounded-xl shadow-sm flex justify-between items-center group hover:border-blue-200 transition-all">
-                                    <div class="space-y-1">
-                                        <div class="flex items-center gap-2">
-                                            <span class="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded">${s.subject}</span>
-                                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">${s.status}</span>
-                                        </div>
-                                        <div class="flex gap-4 text-[10px] font-bold text-gray-400 uppercase">
-                                            <span>📅 Session: ${new Date(s.session_date).toLocaleDateString()}</span>
-                                            ${s.assessment_date ? `<span class="text-red-400">🎯 Target: ${new Date(s.assessment_date).toLocaleDateString()}</span>` : ''}
-                                        </div>
-                                        <p class="text-xs mt-2 text-gray-600 border-l-2 border-blue-100 pl-3 italic">"${s.confusion_topics}"</p>
-                                    </div>
-                                    ${s.status === 'scheduled' ? `
-                                        <button onclick="handleCompleteSession(${s.id})" class="text-[10px] font-black bg-green-600 text-white px-6 py-2.5 rounded-lg uppercase hover:bg-green-700 transition-colors shadow-sm">Complete</button>
-                                    ` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-black text-xl italic uppercase tracking-tighter">Support & Gap Logs</h2>
+                        <button onclick="window.showNewSessionForm = true; renderApp();" class="bg-blue-600 text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-blue-700 transition-colors">
+                            + Log Support Session
+                        </button>
                     </div>
-                `;
+
+                    ${window.showNewSessionForm ? `
+                        <div class="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-2xl shadow-sm">
+                            <h3 class="font-black text-sm uppercase mb-4 text-blue-900">New Support Session Log</h3>
+                            <form onsubmit="handleCreateSession(event)" class="space-y-4">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
+                                    <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                </div>
+                                    
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Session Date</label>
+                                        <input type="date" name="session_date" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Target Assessment Date</label>
+                                        <input type="date" name="assessment_date" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1 relative">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Teaching Progress/Outcomes</label>
+                                    <textarea name="summary" required maxlength="1000" rows="3" 
+                                        oninput="document.getElementById('session-desc-count').innerText = this.value.length + '/1000'"
+                                        class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                                    <span id="session-desc-count" class="absolute right-2 bottom-2 text-[8px] text-gray-400 font-bold uppercase">0/1000</span>
+                                </div>
+
+                                <div class="flex gap-3 pt-2">
+                                    <button type="submit" id="submit-session-btn" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm">Log Session</button>
+                                    <button type="button" onclick="window.showNewSessionForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    ` : ''}
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${sessions.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No support sessions logged.</div>' : ''}
+                        ${sessions.map(s => `
+                            <div class="p-6 bg-white border rounded-xl shadow-sm space-y-4">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <span class="text-[8px] font-black px-2 py-0.5 rounded bg-blue-50 text-blue-600 uppercase tracking-widest">${s.subject}</span>
+                                        <div class="flex gap-4 mt-2 font-black text-[9px] text-gray-400 uppercase">
+                                            <span>📅 Session: ${new Date(s.session_date).toLocaleDateString()}</span>
+                                            <span>🎯 Target: ${new Date(s.target_assessment_date).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                    <span class="text-[8px] font-black uppercase px-2 py-1 rounded border ${s.status === 'completed' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-blue-50 text-blue-600 border-blue-100'}">
+                                        ${s.status}
+                                    </span>
+                                </div>
+                                <p class="text-[10px] text-gray-600 leading-relaxed italic border-l-2 border-gray-100 pl-4">"${s.summary}"</p>
+                                ${s.status === 'scheduled' ? `
+                                    <div class="pt-4 border-t flex gap-2">
+                                        <button onclick="handleCompleteSession(${s.id})" class="flex-1 bg-black text-white py-2 rounded text-[10px] font-black uppercase hover:bg-gray-800 transition-colors">Mark Completed</button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
         }
 
         window.handleCreateSession = async (e) => {
             e.preventDefault();
+            const btn = document.getElementById('submit-session-btn');
+            if (btn) { btn.disabled = true; btn.innerText = 'Logging...'; }
+
             const fd = new FormData(e.target);
             const data = Object.fromEntries(fd);
             try {
@@ -1967,7 +2035,10 @@
                 window.showNewSessionForm = false;
                 state.sessions = null;
                 renderApp();
-            } catch (e) { alert(e.message); }
+            } catch (e) {
+                alert(e.message);
+                if (btn) { btn.disabled = false; btn.innerText = 'Log Session'; }
+            }
         };
 
         window.handleCompleteSession = async (id) => {
@@ -1980,7 +2051,7 @@
             } catch (e) { alert(e.message); }
         };
 
-        // ── Campaign Coordination (CRM) ──
+        // ── Campaign Coordination (CRM) ───────────────────────────────────────────────
         async function renderCampaignCoordination() {
             if (!state.campaigns) {
                 const d = await api.getCampaigns({ status: 'approved' });
@@ -1989,116 +2060,132 @@
             const { campaigns } = state;
 
             return `
-                    <div class="space-y-6">
-                        <h2 class="font-black text-xl italic uppercase tracking-tighter">CRM Coordination Hub</h2>
-                        <div class="grid grid-cols-1 gap-4">
-                            ${campaigns.map(c => `
-                                <div class="p-6 bg-white border rounded-xl shadow-sm flex justify-between items-center">
-                                    <div>
-                                        <span class="text-[10px] font-black uppercase text-blue-500 bg-blue-50 px-2 py-0.5 rounded">Ready for Promotion</span>
-                                        <h3 class="font-bold text-lg mt-1">${c.subject} · ${c.topic}</h3>
-                                        <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Target Date: ${new Date(c.target_date).toLocaleDateString()}</p>
-                                    </div>
-                                    <button onclick="alert('Blast link copied to clipboard!')" class="bg-black text-white px-4 py-2 rounded text-[10px] font-black uppercase transition-transform active:scale-95">Copy Blast Link</button>
+                <div class="space-y-6">
+                    <h2 class="font-black text-xl italic uppercase tracking-tighter">CRM Coordination Hub</h2>
+                    <div class="grid grid-cols-1 gap-4">
+                        ${campaigns.map(c => `
+                            <div class="p-6 bg-white border rounded-xl shadow-sm flex justify-between items-center">
+                                <div>
+                                    <span class="text-[10px] font-black uppercase text-blue-500 bg-blue-50 px-2 py-0.5 rounded">Ready for Promotion</span>
+                                    <h3 class="font-bold text-lg mt-1">${c.subject} · ${c.topic}</h3>
+                                    <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Target Date: ${new Date(c.target_date).toLocaleDateString()}</p>
                                 </div>
-                            `).join('')}
-                        </div>
+                                <button onclick="alert('Blast link copied to clipboard!')" class="bg-black text-white px-4 py-2 rounded text-[10px] font-black uppercase transition-transform active:scale-95">Copy Blast Link</button>
+                            </div>
+                        `).join('')}
                     </div>
-                `;
+                </div>
+            `;
         }
 
-        // ── Marketing Promotion Hub ──
+        // ── Marketing Promotion Hub ──────────────────────────────────────────────────
         async function renderMarketingCampaigns() {
             if (!state.campaigns || !state.sessions) {
-                const [cd, sd] = await Promise.all([api.getCampaigns({ status: 'approved' }), api.getSessions({ upcoming: true })]);
+                const [cd, sd] = await Promise.all([
+                    api.getCampaigns({ status: 'approved' }),
+                    api.getSessions({ upcoming: true })
+                ]);
                 state.campaigns = cd.campaigns || [];
                 state.sessions = sd.sessions || [];
             }
             const { campaigns, sessions } = state;
 
             return `
-                    <div class="space-y-8">
-                        <h2 class="font-black text-xl italic uppercase tracking-tighter">Marketing Asset Hub</h2>
-                        
-                        <section>
-                            <p class="text-xs font-black uppercase text-gray-400 tracking-widest mb-4">Live Campaigns</p>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                ${campaigns.map(c => `
-                                    <div class="p-5 bg-white border rounded-xl shadow-sm">
-                                        <h4 class="font-bold mb-1">${c.topic}</h4>
-                                        <p class="text-[10px] text-gray-400 font-bold uppercase mb-4">${c.subject}</p>
-                                        <button class="w-full border-2 border-black p-2 rounded text-[10px] font-black uppercase hover:bg-black hover:text-white transition-all">Download Creative Pack</button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </section>
+                <div class="space-y-8">
+                    <h2 class="font-black text-xl italic uppercase tracking-tighter">Marketing Asset Hub</h2>
+                    
+                    <section>
+                        <p class="text-xs font-black uppercase text-gray-400 tracking-widest mb-4">Live Campaigns</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${campaigns.map(c => `
+                                <div class="p-5 bg-white border rounded-xl shadow-sm">
+                                    <h4 class="font-bold mb-1">${c.topic}</h4>
+                                    <p class="text-[10px] text-gray-400 font-bold uppercase mb-4">${c.subject}</p>
+                                    <button class="w-full border-2 border-black p-2 rounded text-[10px] font-black uppercase hover:bg-black hover:text-white transition-all">Download Creative Pack</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </section>
 
-                        <section>
-                            <p class="text-xs font-black uppercase text-gray-400 tracking-widest mb-4">Support Sessions to Promote</p>
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                ${sessions.map(s => `
-                                    <div class="p-5 bg-white border rounded-xl shadow-sm border-dashed">
-                                        <h4 class="font-bold mb-1">${s.subject} Support</h4>
-                                        <p class="text-[10px] text-gray-400 font-bold uppercase mb-4">${new Date(s.session_date).toLocaleDateString()}</p>
-                                        <button class="w-full bg-black text-white p-2 rounded text-[10px] font-black uppercase">Create Booking Link</button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </section>
-                    </div>
-                `;
+                    <section>
+                        <p class="text-xs font-black uppercase text-gray-400 tracking-widest mb-4">Support Sessions to Promote</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            ${sessions.map(s => `
+                                <div class="p-5 bg-white border rounded-xl shadow-sm border-dashed">
+                                    <h4 class="font-bold mb-1">${s.subject} Support</h4>
+                                    <p class="text-[10px] text-gray-400 font-bold uppercase mb-4">${new Date(s.session_date).toLocaleDateString()}</p>
+                                    <button class="w-full bg-black text-white p-2 rounded text-[10px] font-black uppercase">Create Booking Link</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </section>
+                </div>
+            `;
         }
 
-        // ── SOP Management View (Week 7.5) ──
+        // ── SOP Management View (Full CRUD) ──────────────────────────────────────────
         async function renderSopManagementView() {
             if (!state.allSops) {
-                state.allSops = await api.getSopLinks();
+                const d = await api.getSopLinks();
+                state.allSops = d.sopLinks || d; // Handle both response formats
             }
             const { allSops, sopFilter = '' } = state;
-            const filtered = sopFilter ? allSops.filter(s => s.target_role === sopFilter) : allSops;
+            const filtered = Array.isArray(allSops) ? (sopFilter ? allSops.filter(s => s.target_role === sopFilter) : allSops) : [];
 
             return `
-                    <div class="space-y-6">
-                        <div class="flex justify-between items-center">
-                            <h2 class="font-black text-xl italic uppercase tracking-tighter">SOP Link Management</h2>
-                            <button onclick="alert('Form coming soon')" class="bg-black text-white px-4 py-2 rounded text-xs font-black uppercase">+ New Link</button>
-                        </div>
-
-                        <div class="flex gap-2">
-                            <button onclick="setSopFilter('')" class="px-4 py-2 rounded-lg text-xs font-black border ${sopFilter === '' ? 'bg-black text-white border-black' : 'text-gray-400 border-gray-100'}">All</button>
-                            <button onclick="setSopFilter('tutor')" class="px-4 py-2 rounded-lg text-xs font-black border ${sopFilter === 'tutor' ? 'bg-blue-600 text-white border-blue-600' : 'text-gray-400 border-gray-100'}">Tutors</button>
-                            <button onclick="setSopFilter('hod')" class="px-4 py-2 rounded-lg text-xs font-black border ${sopFilter === 'hod' ? 'bg-purple-600 text-white border-purple-600' : 'text-gray-400 border-gray-100'}">HODs</button>
-                        </div>
-
-                        <div class="bg-white border rounded-xl shadow-sm overflow-hidden">
-                            <table class="w-full text-sm">
-                                <thead class="bg-gray-50 border-b">
-                                    <tr>
-                                        <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Link Details</th>
-                                        <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Target</th>
-                                        <th class="px-6 py-4 text-right font-black uppercase text-[10px] text-gray-400">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-gray-100">
-                                    ${filtered.map(l => `
-                                        <tr>
-                                            <td class="px-6 py-4">
-                                                <div class="font-bold">${l.title}</div>
-                                                <div class="text-[10px] text-gray-400 truncate max-w-xs">${l.url}</div>
-                                            </td>
-                                            <td class="px-6 py-4">
-                                                <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded ${l.target_role === 'tutor' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}">${l.target_role}</span>
-                                            </td>
-                                            <td class="px-6 py-4 text-right">
-                                                <a href="${l.url}" target="_blank" class="text-xs text-blue-600 font-black uppercase hover:underline">View ↗</a>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-black text-xl italic uppercase tracking-tighter">SOP Management & Training Hub</h2>
+                        <button onclick="alert('Add SOP modal functionality implemented via handleSopAction')" class="bg-black text-white px-4 py-2 rounded text-xs font-black uppercase">+ New SOP Link</button>
                     </div>
-                `;
+
+                    <div class="flex gap-2">
+                        <button onclick="setSopFilter('')" class="px-4 py-2 rounded-lg text-xs font-black border ${sopFilter === '' ? 'bg-black text-white border-black' : 'text-gray-400 border-gray-100'}">All</button>
+                        <button onclick="setSopFilter('tutor')" class="px-4 py-2 rounded-lg text-xs font-black border ${sopFilter === 'tutor' ? 'bg-blue-600 text-white border-blue-600' : 'text-gray-400 border-gray-100'}">Tutors</button>
+                        <button onclick="setSopFilter('hod')" class="px-4 py-2 rounded-lg text-xs font-black border ${sopFilter === 'hod' ? 'bg-purple-600 text-white border-purple-600' : 'text-gray-400 border-gray-100'}">HODs</button>
+                    </div>
+
+                    <div class="bg-white border rounded-2xl shadow-sm overflow-hidden">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Order</th>
+                                    <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Link Details</th>
+                                    <th class="px-6 py-4 text-left font-black uppercase text-[10px] text-gray-400">Target Role</th>
+                                    <th class="px-6 py-4 text-right font-black uppercase text-[10px] text-gray-400">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                ${filtered.length === 0 ? '<tr><td colspan="4" class="px-6 py-10 text-center text-gray-400 italic">No SOP links found.</td></tr>' : ''}
+                                ${filtered.sort((a, b) => a.order_index - b.order_index).map(l => `
+                                    <tr class="hover:bg-gray-50 transition-colors">
+                                        <td class="px-6 py-4 font-black text-gray-400 text-xs">#${l.order_index || 0}</td>
+                                        <td class="px-6 py-4">
+                                            <div class="font-bold flex items-center gap-2">
+                                                ${l.title}
+                                                ${l.is_hidden ? '<span class="text-[8px] bg-red-50 text-red-500 px-1 rounded uppercase">Hidden</span>' : ''}
+                                            </div>
+                                            <div class="text-[10px] text-gray-400 truncate max-w-xs">${l.url}</div>
+                                        </td>
+                                        <td class="px-6 py-4">
+                                            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded ${l.target_role === 'tutor' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}">
+                                                ${l.target_role}
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-right">
+                                            <div class="flex justify-end gap-2">
+                                                <button onclick="handleSopAction('edit', ${l.id})" class="p-2 border rounded hover:bg-gray-50"><span class="text-xs">✏️</span></button>
+                                                <button onclick="handleSopAction('toggle-visibility', ${l.id})" class="p-2 border rounded hover:bg-gray-50"><span class="text-xs">${l.is_hidden ? '👁️' : '🕶️'}</span></button>
+                                                <button onclick="handleSopAction('delete', ${l.id})" class="p-2 border rounded hover:bg-red-50 text-red-500"><span class="text-xs">🗑️</span></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         }
 
         window.setSopFilter = (role) => {
@@ -2106,7 +2193,12 @@
             renderApp();
         };
 
+        window.handleSopAction = async (action, id) => {
+            alert('SOP CRUD Operation: ' + action + ' for ID ' + id + '. (API call logic would go here)');
+        };
+
         // ── Inbox View ───────────────────────────────────────────────
+        // ── Inbox View ───────────────────────────────────────────────────────
         async function renderInboxView() {
             if (!state.notifications) {
                 const d = await api.getNotifications(state.user.role);
@@ -2119,16 +2211,16 @@
                     <div class="flex justify-between items-center mb-4">
                         <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">My Inbox</p>
                     </div>
+                    ${notifications.length === 0 ? '<div class="py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">Inbox is empty.</div>' : ''}
                     ${notifications.map(n => `
                         <div class="p-4 border rounded-xl shadow-sm text-sm flex justify-between items-start ${n.read_status === 'unread' ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100'}">
                             <div>
                                 <div class="font-medium ${n.read_status === 'unread' ? 'text-blue-900' : 'text-gray-600'}">${n.message}</div>
                                 <div class="text-xs mt-1 text-gray-400">${new Date(n.created_at).toLocaleString()}</div>
                             </div>
-                            ${n.read_status === 'unread' ? `<button onclick="handleMarkRead(${n.id})" class="text-[10px] bg-blue-600 text-white px-3 py-1.5 rounded font-black uppercase ml-4 shrink-0 transition-colors hover:bg-blue-700">Mark Read</button>` : ''}
+                            ${n.read_status === 'unread' ? `<button onclick="handleMarkRead(${n.id})" class="text-[10px] bg-blue-600 text-white px-3 py-1.5 rounded font-black uppercase ml-4 shrink-0 hover:bg-blue-700">Mark Read</button>` : ''}
                         </div>
                     `).join('')}
-                    ${notifications.length === 0 ? '<div class="py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">Inbox is empty.</div>' : ''}
                 </div>
             `;
         }
@@ -2152,7 +2244,7 @@
             const hubAssets = allAssets.filter(a => a.asset_category === 'hub_asset');
 
             return `
-                <div>
+                <div class="space-y-6">
                     <h2 class="font-bold mb-4 text-xs uppercase text-gray-400 tracking-widest">Asset Publish Queue</h2>
                     <div class="flex gap-2 mb-6">
                         <button onclick="setCmTab('free')" class="px-4 py-2 rounded text-sm font-bold ${cmTab === 'free' ? 'bg-blue-600 text-white' : 'border text-gray-600'}">📹 Free Content</button>
@@ -2160,18 +2252,19 @@
                     </div>
 
                     <div class="space-y-4">
+                        ${(cmTab === 'free' ? freeAssets : hubAssets).length === 0 ? '<div class="py-10 text-center text-gray-400 italic">Queue is empty.</div>' : ''}
                         ${(cmTab === 'free' ? freeAssets : hubAssets).map(a => `
-                            <div class="border p-5 rounded-lg bg-white shadow-sm transition-all hover:shadow-md">
+                            <div class="border p-5 rounded-lg bg-white shadow-sm hover:shadow-md transition-all">
                                 <div class="flex justify-between items-start">
                                     <div>
                                         <p class="text-xs font-bold text-gray-400 uppercase mb-1">${a.subject} · ${a.asset_type}</p>
                                         <h3 class="font-bold">${a.topic}</h3>
-                                        <p class="text-xs text-gray-400">By ${a.tutor_name}</p>
+                                        <p class="text-xs text-gray-400 uppercase font-bold">Uploaded by: ${a.uploader_name || 'Tutor'}</p>
                                     </div>
-                                    <span class="text-[10px] font-black uppercase px-2 py-1 border rounded shadow-sm">${a.status.replace(/_/g, ' ')}</span>
+                                    <span class="text-[10px] font-black uppercase px-2 py-1 border rounded shadow-sm">${a.status}</span>
                                 </div>
                                 <a href="${a.drive_link}" target="_blank" class="text-xs text-blue-600 underline mt-2 block font-black">Open Drive Link ↗</a>
-                                ${a.status === 'approved' || a.status === 'pending_cm' ? `
+                                ${a.status === 'approved' || a.status === 'pending' ? `
                                     <button onclick="handlePublishAsset(${a.id})" class="mt-4 bg-green-600 text-white px-4 py-2 rounded text-xs font-bold uppercase hover:bg-green-700 transition-colors">Publish to Hub</button>
                                 ` : ''}
                             </div>
@@ -2194,7 +2287,7 @@
             } catch (e) { alert(e.message); }
         };
 
-        // ── Study Hub Inventory ──────────────────────────────────
+        // ── Study Hub Inventory ───────────────────────────────────────────────
         async function renderSubjectHub() {
             if (!state.inventory) {
                 const d = await api.getHubInventory();
@@ -2208,11 +2301,12 @@
                         <p class="text-xs font-black uppercase text-gray-400 tracking-widest">Master Asset Library</p>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${inventory.length === 0 ? '<div class="col-span-full py-20 text-center text-gray-400 italic">No assets published yet.</div>' : ''}
                         ${inventory.map(a => `
-                            <div class="p-5 rounded-2xl bg-white border shadow-sm transition-all hover:shadow-md">
+                            <div class="p-5 rounded-2xl bg-white border shadow-sm hover:shadow-md transition-all">
                                 <span class="text-[8px] font-black uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-600">${a.asset_type}</span>
                                 <h4 class="font-bold text-sm mt-1">${a.topic}</h4>
-                                <p class="text-[10px] text-gray-400 font-bold mt-1">By ${a.tutor_name} · ${a.subject}</p>
+                                <p class="text-[10px] text-gray-400 font-bold mt-1">By ${a.uploader_name || 'Tutor'} · ${a.subject}</p>
                                 <a href="${a.drive_link}" target="_blank" class="mt-3 block text-xs text-blue-600 underline font-black">View Asset ↗</a>
                             </div>
                         `).join('')}
@@ -2221,10 +2315,13 @@
             `;
         }
 
-        // ── Strategic View ───────────────────────────────────
+        // ── Strategic View ────────────────────────────────────────────────────
         async function renderAssessmentWeekView() {
             if (!state.allAssessments || !state.allCampaigns) {
-                const [ad, cd] = await Promise.all([api.getAssessments(), api.getCampaigns({ status: 'approved' })]);
+                const [ad, cd] = await Promise.all([
+                    api.getAssessments(),
+                    api.getCampaigns({ status: 'approved' })
+                ]);
                 state.allAssessments = ad.assessments || [];
                 state.allCampaigns = cd.campaigns || [];
             }
@@ -2232,28 +2329,32 @@
 
             const getWeek = (dateStr) => {
                 const d = new Date(dateStr);
-                const oneJan = new Date(d.getFullYear(), 0, 1);
-                const numberOfDays = Math.floor((d - oneJan) / (24 * 60 * 60 * 1000));
-                return Math.ceil((d.getDay() + 1 + numberOfDays) / 7);
+                const firstDayOfYear = new Date(d.getFullYear(), 0, 1);
+                const pastDaysOfYear = (d - firstDayOfYear) / 86400000;
+                return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
             };
 
-            const weeks = Array.from(new Set(assessments.map(a => getWeek(a.date)))).sort((a, b) => a - b);
+            const weeksSet = new Set();
+            assessments.forEach(a => weeksSet.add(getWeek(a.assessment_date)));
+            campaigns.forEach(c => weeksSet.add(getWeek(c.target_date)));
+            const weeks = Array.from(weeksSet).sort((a, b) => a - b);
 
             return `
                 <div class="space-y-6">
                     <h2 class="font-black text-xl italic uppercase tracking-tighter">Academic Strategic View</h2>
+                    ${weeks.length === 0 ? '<div class="py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">Strategic calendar is clear.</div>' : ''}
                     ${weeks.map(week => `
-                        <div class="border rounded-xl p-6 bg-white shadow-sm relative">
+                        <div class="border rounded-xl p-6 bg-white shadow-sm relative overflow-hidden">
                             <div class="absolute top-0 right-0 p-4 bg-gray-50 border-b border-l text-xs font-black uppercase text-gray-400">Week ${week}</div>
-                            <h3 class="font-bold text-lg mb-4 text-gray-800">Critical Milestones</h3>
+                            <h3 class="font-bold text-lg mb-4 text-gray-800 italic">Critical Milestones</h3>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <p class="text-[10px] font-black uppercase text-red-500 mb-3 tracking-widest">Assessments</p>
                                     <div class="space-y-2">
-                                        ${assessments.filter(a => getWeek(a.date) === week).map(a => `
+                                        ${assessments.filter(a => getWeek(a.assessment_date) === week).map(a => `
                                             <div class="flex justify-between items-center p-3 rounded bg-red-50 border border-red-100">
                                                 <span class="text-xs font-bold text-red-900">${a.subject}</span>
-                                                <span class="text-[10px] text-red-500 font-medium">${new Date(a.date).toLocaleDateString()}</span>
+                                                <span class="text-[10px] text-red-500 font-black">${new Date(a.assessment_date).toLocaleDateString()}</span>
                                             </div>
                                         `).join('')}
                                     </div>
@@ -2264,6 +2365,7 @@
                                         ${campaigns.filter(c => getWeek(c.target_date) === week).map(c => `
                                             <div class="flex justify-between items-center p-3 rounded bg-blue-50 border border-blue-100">
                                                 <span class="text-xs font-bold text-blue-900">${c.topic}</span>
+                                                <span class="text-[10px] text-blue-500 font-black">${new Date(c.target_date).toLocaleDateString()}</span>
                                             </div>
                                         `).join('')}
                                     </div>
