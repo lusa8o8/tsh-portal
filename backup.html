@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSH ERP - Week 2: Quality Gate</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="sidebar.css">
+    <script src="sidebar-toggle.js" defer></script>
+    <style>
+        /* Coordination & Promotion Cards */
+        .coordination-list,
+        .promotion-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .coordination-card,
+        .promotion-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .coordination-card:hover,
+        .promotion-card:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .card-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .badge-free {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-paid {
+            background: #fff3e0;
+            color: #f57c00;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .card-body p {
+            margin: 8px 0;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .card-body p strong {
+            color: #333;
+            font-weight: 600;
+        }
+
+        .promo-details {
+            margin-bottom: 15px;
+        }
+
+        .promo-actions {
+            display: flex;
+            gap: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #999;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const API_URL = 'http://localhost:3001/api';
+
+        const api = {
+            async request(endpoint, options = {}) {
+                const token = localStorage.getItem('token');
+                const headers = { 'Content-Type': 'application/json', ...(token && { 'Authorization': `Bearer ${token}` }), ...options.headers };
+                const res = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Request failed');
+                return data;
+            },
+            login: (email, password) => api.request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+            getMe: () => api.request('/auth/me'),
+            // Campaigns (Week 1)
+            getCampaigns: (params = {}) => {
+                const query = new URLSearchParams(params).toString();
+                return api.request(`/campaigns${query ? '?' + query : ''}`);
+            },
+            createCampaign: (d) => api.request('/campaigns', { method: 'POST', body: JSON.stringify(d) }),
+            updateCampaign: (id, status, reason) => api.request(`/campaigns/${id}`, { method: 'PATCH', body: JSON.stringify({ status, reason }) }),
+            // Assets (Week 2)
+            getAssets: () => api.request('/assets'),
+            createAsset: (d) => api.request('/assets', { method: 'POST', body: JSON.stringify(d) }),
+            updateAsset: (id, status, hod_feedback) => api.request(`/assets/${id}`, { method: 'PATCH', body: JSON.stringify({ status, hod_feedback }) }),
+            publishAsset: (id) => api.request(`/assets/${id}/publish`, { method: 'PATCH' }),
+            requestRevision: (id, reason) => api.request(`/assets/${id}/request-revision`, { method: 'PATCH', body: JSON.stringify({ reason }) }),
+            getFreeContent: () => api.request('/assets/free-content'),
+            // Notifications & Dashboard (Week 5)
+            getNotifications: (role) => api.request(`/notifications?role=${role}`),
+            markNotificationRead: (id) => api.request(`/notifications/${id}/read`, { method: 'PATCH' }),
+            getDashboard: () => api.request('/dashboard'),
+            // Assessments (Week 3)
+            getAssessments: () => api.request('/assessments'),
+            createAssessment: (d) => api.request('/assessments', { method: 'POST', body: JSON.stringify(d) }),
+            // Support Sessions (Week 3)
+            getSessions: (params = {}) => {
+                const query = new URLSearchParams(params).toString();
+                return api.request(`/support_sessions${query ? '?' + query : ''}`);
+            },
+            createSession: (d) => api.request('/support_sessions', { method: 'POST', body: JSON.stringify(d) }),
+            updateSession: (id, d) => api.request(`/support_sessions/${id}`, { method: 'PATCH', body: JSON.stringify(d) }),
+            // Week 4: Outcomes & Inventory
+            logCampaignOutcome: (id, data) => api.request(`/campaigns/${id}/outcome`, { method: 'PATCH', body: JSON.stringify(data) }),
+            getHubInventory: () => api.request('/hub/inventory'),
+            // Week 7.5: SOP Links
+            getSopLinks: (params = {}) => {
+                const query = new URLSearchParams(params).toString();
+                return api.request(`/sop-links${query ? '?' + query : ''}`);
+            },
+            createSopLink: (data) => api.request('/sop-links', { method: 'POST', body: JSON.stringify(data) }),
+            updateSopLink: (id, data) => api.request(`/sop-links/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+            deleteSopLink: (id) => api.request(`/sop-links/${id}`, { method: 'DELETE' })
+        };
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            useEffect(() => {
+                const token = localStorage.getItem('token');
+                if (token) api.getMe().then(d => setUser(d.user)).catch(() => localStorage.removeItem('token')).finally(() => setLoading(false));
+                else setLoading(false);
+            }, []);
+            if (loading) return <div class="flex h-screen items-center justify-center text-gray-400">Loading...</div>;
+            if (!user) return <LoginPage onLogin={(t, u) => { localStorage.setItem('token', t); setUser(u); }} />;
+            return <Dashboard user={user} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />;
+        }
+
+        function LoginPage({ onLogin }) {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [err, setErr] = useState('');
+            const submit = async (e) => {
+                e.preventDefault();
+                try { const { token, user } = await api.login(email, password); onLogin(token, user); }
+                catch (e) { setErr(e.message); }
+            };
+            return (
+                <div class="flex h-screen items-center justify-center px-4">
+                    <form onSubmit={submit} class="w-full max-w-sm bg-white p-8 border rounded-lg shadow-sm">
+                        <h1 class="text-2xl font-bold mb-1">TSH ERP</h1>
+                        <p class="text-sm text-gray-400 mb-6">Campaign & Quality Gate</p>
+                        {err && <div class="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{err}</div>}
+                        <input type="email" placeholder="Email" class="w-full border p-2 mb-4 rounded text-sm" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="password" placeholder="Password" class="w-full border p-2 mb-6 rounded text-sm" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <button class="w-full bg-black text-white p-2 rounded font-medium text-sm">Login</button>
+                    </form>
+                </div>
+            );
+        }
+
+        function PlaceholderView({ title }) {
+            return (
+                <div class="bg-white rounded-xl shadow-sm border p-12 text-center mt-8">
+                    <h2 class="text-2xl font-bold mb-4">{title}</h2>
+                    <p class="text-gray-500">This module is under development and will be available soon.</p>
+                </div>
+            );
+        }
+
+        function Dashboard({ user, onLogout }) {
+            const [tab, setTab] = useState('overview');
+            const [unreadCount, setUnreadCount] = useState(0);
+
+            useEffect(() => {
+                api.getNotifications(user.role).then(d => {
+                    const unread = d.notifications.filter(n => n.read_status === 'unread').length;
+                    setUnreadCount(unread);
+                });
+            }, [user.role]);
+
+            const tabs = [
+                { id: 'overview', icon: '📊', label: 'Overview', roles: ['tutor', 'hod', 'admin', 'content_manager', 'marketing', 'crm'] },
+                { id: 'inbox', icon: '📬', label: 'Inbox', roles: ['tutor', 'hod', 'admin', 'content_manager', 'marketing', 'crm'] },
+                { id: 'queue', icon: '📦', label: 'Asset Queue', roles: ['content_manager'] },
+                { id: 'campaigns', icon: user.role === 'marketing' ? '📢' : '📅', label: 'Campaigns', roles: ['tutor', 'hod', 'admin', 'marketing', 'crm'] },
+                { id: 'assets', icon: '📤', label: 'Upload Queue', roles: ['tutor', 'admin'] },
+                { id: 'assessments', icon: '📋', label: 'Assessment Map', roles: ['tutor', 'hod', 'admin'] },
+                { id: 'sessions', icon: '🎯', label: 'Support Sessions', roles: ['tutor', 'hod', 'admin'] },
+                { id: 'sop-management', icon: '⚙️', label: 'SOP Management', roles: ['hod', 'admin'] },
+                { id: 'hub', icon: '📚', label: 'Study Hub', roles: ['tutor', 'hod', 'admin'] },
+                { id: 'strategic', icon: '🗓️', label: 'Strategic View', roles: ['hod', 'admin'] },
+                { id: 'leads', icon: '👥', label: 'Leads', roles: ['crm'] },
+                { id: 'follow-ups', icon: '📞', label: 'Follow-ups', roles: ['crm'] },
+                { id: 'conversions', icon: '✅', label: 'Conversions', roles: ['crm'] }
+            ].filter(t => t.roles.includes(user.role));
+
+            const renderContent = () => (
+                <React.Fragment>
+                    {tab === 'overview' && <RoleDashboard user={user} />}
+                    {tab === 'inbox' && <InboxView user={user} />}
+                    {tab === 'queue' && <ContentManagerQueue user={user} />}
+                    {tab === 'campaigns' && (user.role === 'crm' ? <CampaignCoordination user={user} /> : user.role === 'marketing' ? <MarketingCampaigns user={user} /> : <CampaignView user={user} />)}
+                    {tab === 'assets' && <AssetView user={user} />}
+                    {tab === 'assessments' && <AssessmentMap user={user} />}
+                    {tab === 'sessions' && <SupportSessions user={user} />}
+                    {tab === 'sop-management' && <SopManagementView user={user} />}
+                    {tab === 'hub' && <SubjectHub user={user} />}
+                    {tab === 'strategic' && <AssessmentWeekView user={user} />}
+                    {tab === 'leads' && <PlaceholderView title="Leads Management" />}
+                    {tab === 'follow-ups' && <PlaceholderView title="Follow-ups Tracking" />}
+                    {tab === 'conversions' && <PlaceholderView title="Conversions Log" />}
+                </React.Fragment>
+            );
+
+            const Header = () => (
+                <div class="flex justify-between items-center mb-8">
+                    <div>
+                        <h1 class="text-xl font-bold uppercase tracking-tight">TSH ERP</h1>
+                        <p class="text-xs text-gray-400 font-mono">{user.name} ({user.role})</p>
+                    </div>
+                    <button onClick={onLogout} class="text-sm text-gray-500 underline">Logout</button>
+                </div>
+            );
+
+            return (
+                <div class="flex min-h-screen">
+                    {/* Hamburger button */}
+                    <button id="hamburger-btn" class="md:hidden fixed top-4 right-4 z-50 bg-[#2c3e50] text-white p-2 rounded shadow">
+                        ☰
+                    </button>
+
+                    {/* Overlay */}
+                    <div id="sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden md:hidden"></div>
+
+                    {/* Sidebar */}
+                    <aside class="sidebar w-[240px] bg-[#2c3e50] text-[#ecf0f1] fixed inset-y-0 left-0 z-40 flex flex-col pt-6 md:translate-x-0">
+                        <div class="px-6 mb-8 flex flex-col relative">
+                            <h1 class="text-[18px] font-bold">TSH ERP</h1>
+                            <p class="text-sm mt-1">{user.name}</p>
+                            <p class="text-xs text-gray-400">({user.role})</p>
+                            <button onClick={onLogout} class="text-xs text-blue-300 underline absolute top-6 right-6 hover:text-white transition-colors">Logout</button>
+                        </div>
+
+                        <nav class="sidebar-nav flex-1">
+                            {tabs.map(t => (
+                                <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); setTab(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors relative ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
+                                    <span class="mr-3">{t.icon}</span> {t.label}
+                                    {t.id === 'inbox' && unreadCount > 0 && <span class="notification-badge">{unreadCount}</span>}
+                                </a>
+                            ))}
+                        </nav>
+
+                        <div class="border-t border-[#34495e] mt-auto">
+                            <a href="#" class="nav-link block px-6 py-4 hover:bg-[#34495e] transition-colors">Help</a>
+                        </div>
+                    </aside>
+
+                    {/* Main Content Area */}
+                    <main class="flex-1 md:ml-[240px] p-4 md:p-8 w-full">
+                        <div class="max-w-4xl mx-auto mt-12 md:mt-0">
+                            {renderContent()}
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        // ── Role Dashboards (Week 5) ──────────────────────────────────────────
+        function RoleDashboard({ user }) {
+            const [counts, setCounts] = useState(null);
+            const [sopLinks, setSopLinks] = useState([]);
+
+            useEffect(() => {
+                api.getDashboard().then(d => setCounts(d.counts));
+                api.getSopLinks({ target_role: user.role, active: true }).then(data => setSopLinks(data));
+            }, [user.role]);
+
+            if (!counts) return <div class="text-center py-12 text-gray-400 text-sm">Loading dashboard...</div>;
+
+            return (
+                <div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {Object.entries(counts).map(([key, count]) => (
+                            <div key={key} class="p-6 bg-white border rounded-xl shadow-sm text-center flex flex-col justify-center h-32">
+                                <div class="text-4xl font-black mb-2 tracking-tighter">{count}</div>
+                                <div class="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-tight">{key.replace(/_/g, ' ')}</div>
+                            </div>
+                        ))}
+                        {Object.keys(counts).length === 0 && <div class="col-span-full text-center py-12 text-gray-400 text-sm italic">Metrics currently unavailable for your role.</div>}
+                    </div>
+
+                    {user.role === 'tutor' && (
+                        <div class="mt-8">
+                            <section class="quick-start">
+                                <h2>Getting Started</h2>
+                                <div class="help-section">
+                                    <h3>Common Tasks</h3>
+                                    <ul class="help-list">
+                                        <li><strong>Submit a campaign:</strong> Campaigns → "+ New Campaign" button<br /><small class="block text-gray-500 mt-1">Propose classes based on student needs and exam timing</small></li>
+
+                                        {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                            <li key={link.id}>
+                                                <strong>{link.description?.split(',')[0] || link.link_text}:</strong> {link.description}
+                                                <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                            </li>
+                                        ))}
+
+                                        <li><strong>Before support sessions:</strong> Review student's gap logs in Support Sessions tab<br /><small class="block text-gray-500 mt-1">Focus on weak topics they've struggled with before</small></li>
+                                        <li><strong>After support sessions:</strong> Support Sessions → Find session → Log gaps discovered</li>
+                                        <li><strong>Check notifications:</strong> Click "Inbox" in the sidebar (badge shows new items)</li>
+                                        <li><strong>Browse teaching resources:</strong> Study Hub Inventory tab</li>
+                                    </ul>
+                                </div>
+                                <div class="help-section">
+                                    <h3>Need Help?</h3>
+                                    <ul class="help-list">
+                                        <li>Check your <strong>Inbox</strong> for system notifications and HOD responses</li>
+                                        <li>Contact HOD directly for urgent campaign approvals</li>
+                                        <li>Technical issues: Email <a href="mailto:support@tsh.com" class="text-blue-600 underline">support@tsh.com</a></li>
+                                    </ul>
+                                </div>
+                            </section>
+                        </div>
+                    )}
+
+                    {user.role === 'hod' && (
+                        <section class="quick-start">
+                            <h2>Getting Started</h2>
+                            <div class="help-section">
+                                <h3>Common Tasks</h3>
+                                <ul class="help-list">
+                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                        <li key={link.id}>
+                                            <strong>{link.description.split(',')[0] || link.link_text}:</strong> {link.description}
+                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                        </li>
+                                    ))}
+                                    <li>
+                                        <strong>Review Hub Resources:</strong> Upload Queue → review pending hub_asset submissions
+                                        <br /><small class="block text-gray-500 mt-1">Check quality, alignment with learning goals, completeness. Read Tutor Notes for reviewer context.</small>
+                                    </li>
+                                    <li><strong>Monitor student gaps:</strong> Support Sessions → View gap logs<br /><small class="block text-gray-500 mt-1">Identify recurring struggles that need Hub resources or campaigns</small></li>
+                                    <li><strong>Review Hub inventory:</strong> Study Hub Inventory tab — see published materials, identify content gaps</li>
+                                    <li><strong>Check notifications:</strong> Click "Inbox" in the sidebar (badge shows escalated items)</li>
+                                    <li><strong>Monitor sessions:</strong> Support Sessions tab to overview completed gap logs</li>
+                                </ul>
+                            </div>
+                            <div class="help-section">
+                                <h3>Need Help?</h3>
+                                <ul class="help-list">
+                                    <li>Check your <strong>Inbox</strong> for escalations requiring your review</li>
+                                    <li>Contact Technical Support for platform anomalies</li>
+                                    <li>Technical issues: Email <a href="mailto:support@tsh.com" class="text-blue-600 underline">support@tsh.com</a></li>
+                                </ul>
+                            </div>
+                        </section>
+                    )}
+
+                    {user.role === 'admin' && (
+                        <section class="quick-start">
+                            <h2>System Administration</h2>
+                            <div class="help-section">
+                                <h3>Common Tasks</h3>
+                                <ul class="help-list">
+                                    <li><strong>Manage governance rules:</strong> Oversee campaigns and workflows</li>
+                                    <li><strong>Monitor database integrity:</strong> Validate metrics on the dashboard</li>
+                                    <li><strong>System audits:</strong> Review all role activity and notifications</li>
+                                </ul>
+                            </div>
+                        </section>
+                    )}
+
+                    {user.role === 'content_manager' && (
+                        <section class="quick-start">
+                            <h2>Getting Started</h2>
+                            <div class="help-section">
+                                <h3>Common Tasks</h3>
+                                <ul class="help-list">
+                                    <li>
+                                        <strong>📹 Free Class Content:</strong>
+                                        Asset Queue → "Free Content" tab → review uploads from tutors
+                                        <br /><small class="block text-gray-500 mt-1">→ Auto-approved on upload. Use "Mark Published" when edit is complete, or "Request Revision" to send back to tutor.</small>
+                                    </li>
+                                    <li>
+                                        <strong>📚 Hub Resources:</strong>
+                                        Asset Queue → "Hub Resources" tab → quality-check and publish tutor submissions
+                                        <br /><small class="block text-gray-500 mt-1">→ Hub assets now come directly to you (no HOD step). Review tutor notes, then "Approve & Publish to Hub".</small>
+                                    </li>
+                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                        <li key={link.id}>
+                                            <strong>{link.link_text}:</strong> {link.description}
+                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                        </li>
+                                    ))}
+                                    <li><strong>Check notifications:</strong> Click "Inbox" to see alerts when new content arrives</li>
+                                </ul>
+                            </div>
+                        </section>
+                    )}
+
+                    {user.role === 'marketing' && (
+                        <section class="quick-start">
+                            <h2>Getting Started</h2>
+                            <div class="help-section">
+                                <h3>Common Tasks</h3>
+                                <ul class="help-list">
+                                    <li><strong>📅 View approved campaigns:</strong> Click the <strong>Campaigns</strong> tab in the sidebar<br /><small class="block text-gray-500 mt-1">See full campaign details (date, topic, tutor, goals) ready for promotion</small></li>
+                                    <li><strong>📣 Inbox alerts:</strong> Click "Inbox" for notifications when new campaigns are approved and ready to promote</li>
+                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                        <li key={link.id}>
+                                            <strong>{link.link_text}:</strong> {link.description}
+                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </section>
+                    )}
+                    {user.role === 'crm' && (
+                        <section class="quick-start">
+                            <h2>Getting Started</h2>
+                            <div class="help-section">
+                                <h3>Common Tasks</h3>
+                                <ul class="help-list">
+                                    <li><strong>📅 Track campaigns:</strong> Click the <strong>Campaigns</strong> tab in the sidebar<br /><small class="block text-gray-500 mt-1">See approved campaigns and upcoming sessions for follow-up and conversion</small></li>
+                                    <li><strong>📨 Inbox tracking:</strong> Check system notifications regarding active promotional funnels</li>
+                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                        <li key={link.id}>
+                                            <strong>{link.link_text}:</strong> {link.description}
+                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </section>
+                    )}
+
+                </div>
+            );
+        }
+
+        // ── CRM Campaigns Tab (Week 8) ──────────────────────────────────────────
+        function CampaignCoordination({ user }) {
+            const [campaigns, setCampaigns] = useState([]);
+            const [sessions, setSessions] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                Promise.all([
+                    api.getCampaigns({ status: 'approved' }),
+                    api.getSessions({ upcoming: 'true' })
+                ]).then(([cData, sData]) => {
+                    setCampaigns(cData.campaigns || []);
+                    setSessions(sData.sessions || []);
+                    setLoading(false);
+                }).catch(() => setLoading(false));
+            }, []);
+
+            if (loading) return <div class="text-center py-12 text-gray-400 text-sm">Loading...</div>;
+
+            const CampaignCard = ({ c }) => (
+                <div class="coordination-card">
+                    <div class="card-header">
+                        <span class={`badge ${c.asset_category === 'free_asset' ? 'badge-free' : 'badge-paid'}`}>
+                            {c.asset_category === 'free_asset' ? 'FREE CLASS' : 'PAID CLASS'}
+                        </span>
+                        <h3>{c.subject} — {c.topic}</h3>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>📅 Date:</strong> {c.target_date ? new Date(c.target_date).toLocaleDateString() : '—'}</p>
+                        <p><strong>👤 Tutor:</strong> {c.created_by_name || 'Unknown'}</p>
+                        <p><strong>🎓 Learning Goals:</strong> {c.outcomes || 'Not specified'}</p>
+                        {c.trick_pattern && <p><strong>🎯 Exam Pattern:</strong> {c.trick_pattern}</p>}
+                    </div>
+                </div>
+            );
+
+            const SessionCard = ({ s }) => (
+                <div class="coordination-card">
+                    <div class="card-header">
+                        <h3>{s.subject} — Support Session</h3>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>📅 Date:</strong> {new Date(s.session_date).toLocaleDateString()}</p>
+                        <p><strong>🎯 Focus:</strong> {s.confusion_topics || 'Not specified'}</p>
+                        <p><strong>📋 Assessment:</strong> {s.assessment_date ? new Date(s.assessment_date).toLocaleDateString() : 'None'}</p>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div>
+                    <h2 class="font-bold mb-6 text-xs uppercase text-gray-400 tracking-widest">Campaigns & Sessions — For Coordination</h2>
+
+                    <div class="mb-8">
+                        <p class="text-sm font-bold text-gray-700 mb-1">📅 Approved Campaigns</p>
+                        <p class="text-xs text-gray-400 mb-4">Track for student follow-up and conversion opportunities</p>
+                        <div class="coordination-list">
+                            {campaigns.length === 0
+                                ? <p class="empty-state">No approved campaigns yet</p>
+                                : campaigns.map(c => <CampaignCard key={c.id} c={c} />)
+                            }
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-sm font-bold text-gray-700 mb-1">🎯 Upcoming Support Sessions</p>
+                        <p class="text-xs text-gray-400 mb-4">Proactively engage students around scheduled sessions</p>
+                        <div class="coordination-list">
+                            {sessions.length === 0
+                                ? <p class="empty-state">No upcoming sessions scheduled</p>
+                                : sessions.map(s => <SessionCard key={s.id} s={s} />)
+                            }
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+
+        // ── Marketing Campaigns Tab (Week 8) ────────────────────────────────────
+        function MarketingCampaigns({ user }) {
+            const [campaigns, setCampaigns] = useState([]);
+            const [sessions, setSessions] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                Promise.all([
+                    api.getCampaigns({ status: 'approved' }),
+                    api.getSessions({ upcoming: 'true' })
+                ]).then(([cData, sData]) => {
+                    setCampaigns(cData.campaigns || []);
+                    setSessions(sData.sessions || []);
+                    setLoading(false);
+                }).catch(() => setLoading(false));
+            }, []);
+
+            if (loading) return <div class="text-center py-12 text-gray-400 text-sm">Loading...</div>;
+
+            return (
+                <div>
+                    <h2 class="font-bold mb-6 text-xs uppercase text-gray-400 tracking-widest">Campaigns & Sessions — For Promotion</h2>
+
+                    <div class="mb-8">
+                        <p class="text-sm font-bold text-gray-700 mb-1">📢 Approved Campaigns (Ready for Promotion)</p>
+                        <p class="text-xs text-gray-400 mb-4">Full campaign details for creating promotional materials</p>
+                        <div class="promotion-list">
+                            {campaigns.length === 0
+                                ? <p class="empty-state">No approved campaigns to promote yet</p>
+                                : campaigns.map(c => (
+                                    <div key={c.id} class="promotion-card">
+                                        <div class="card-header">
+                                            <span class={`badge ${c.asset_category === 'free_asset' ? 'badge-free' : 'badge-paid'}`}>
+                                                {c.asset_category === 'free_asset' ? 'FREE CLASS' : 'PAID CLASS'}
+                                            </span>
+                                            <h3>{c.subject} — {c.topic}</h3>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="promo-details">
+                                                <p><strong>📅 Date:</strong> {c.target_date ? new Date(c.target_date).toLocaleDateString() : '—'}</p>
+                                                <p><strong>📚 Course:</strong> {c.subject}</p>
+                                                <p><strong>🎯 Topic:</strong> {c.topic}</p>
+                                                <p><strong>👤 Tutor:</strong> {c.created_by_name || 'Unknown'}</p>
+                                                <p><strong>🎓 Learning Goals:</strong> {c.outcomes || 'Not specified'}</p>
+                                                {c.trick_pattern && <p><strong>📝 Exam Pattern:</strong> {c.trick_pattern}</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+
+                    <div>
+                        <p class="text-sm font-bold text-gray-700 mb-1">🎯 Scheduled Support Sessions</p>
+                        <p class="text-xs text-gray-400 mb-4">Promote available 1-on-1 support opportunities</p>
+                        <div class="promotion-list">
+                            {sessions.length === 0
+                                ? <p class="empty-state">No sessions to promote yet</p>
+                                : sessions.map(s => (
+                                    <div key={s.id} class="promotion-card">
+                                        <div class="card-header">
+                                            <h3>{s.subject} — 1-on-1 Support</h3>
+                                        </div>
+                                        <div class="card-body">
+                                            <p><strong>📅 Date:</strong> {new Date(s.session_date).toLocaleDateString()}</p>
+                                            <p><strong>🎯 Focus:</strong> {s.confusion_topics || 'Personalized support'}</p>
+                                            <p><strong>📋 Assessment:</strong> {s.assessment_date ? new Date(s.assessment_date).toLocaleDateString() : 'None'}</p>
+                                        </div>
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ── SOP Management View (Week 7.5) ──────────────────────────────────
+        function SopManagementView({ user }) {
+            const [links, setLinks] = useState([]);
+            const [showModal, setShowModal] = useState(false);
+            const [editingLink, setEditingLink] = useState(null);
+            const [filterRole, setFilterRole] = useState('');
+            const [err, setErr] = useState('');
+            const [successMsg, setSuccessMsg] = useState('');
+
+            const loadLinks = () => api.getSopLinks().then(data => setLinks(data));
+            useEffect(() => { loadLinks(); }, []);
+
+            const showSuccess = (msg) => {
+                setSuccessMsg(msg);
+                setTimeout(() => setSuccessMsg(''), 3000);
+            };
+
+            const openModal = (link = null) => {
+                setEditingLink(link);
+                setShowModal(true);
+                setErr('');
+            };
+
+            const closeModal = () => {
+                setEditingLink(null);
+                setShowModal(false);
+                setErr('');
+            };
+
+            const saveLink = async (e) => {
+                e.preventDefault();
+                setErr('');
+                const fd = new FormData(e.target);
+                const data = {
+                    link_text: fd.get('link_text'),
+                    sop_url: fd.get('sop_url'),
+                    description: fd.get('description'),
+                    target_role: fd.get('target_role'),
+                    section: fd.get('section'),
+                    display_order: parseInt(fd.get('display_order')) || 0,
+                    active: fd.get('active') !== null
+                };
+
+                try {
+                    if (editingLink) {
+                        await api.updateSopLink(editingLink.id, data);
+                        showSuccess('SOP Link updated successfully');
+                    } else {
+                        await api.createSopLink(data);
+                        showSuccess('SOP Link created successfully');
+                    }
+                    closeModal();
+                    loadLinks();
+                } catch (error) {
+                    setErr(error.message);
+                }
+            };
+
+            const deleteLink = async (id) => {
+                if (!confirm('Are you sure you want to hide this SOP link? It will be archived.')) return;
+                try {
+                    await api.deleteSopLink(id);
+                    showSuccess('SOP Link hidden successfully');
+                    loadLinks();
+                } catch (error) {
+                    alert(error.message);
+                }
+            };
+
+            const filteredLinks = filterRole ? links.filter(l => l.target_role === filterRole) : links;
+
+            return (
+                <div class="space-y-6">
+                    {successMsg && (
+                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded shadow-sm">
+                            <span class="block sm:inline">{successMsg}</span>
+                        </div>
+                    )}
+                    <div class="flex justify-between items-center">
+                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">SOP Link Management</p>
+                        <button onClick={() => openModal()} class="bg-black text-white px-4 py-2 rounded text-sm">+ Add New Link</button>
+                    </div>
+
+                    <div class="flex gap-2 mb-4">
+                        <button onClick={() => setFilterRole('')} class={`px-3 py-1 text-xs font-bold rounded ${filterRole === '' ? 'bg-gray-800 text-white' : 'bg-gray-100'}`}>All</button>
+                        <button onClick={() => setFilterRole('tutor')} class={`px-3 py-1 text-xs font-bold rounded ${filterRole === 'tutor' ? 'bg-blue-600 text-white' : 'bg-gray-100'}`}>Tutor links</button>
+                        <button onClick={() => setFilterRole('hod')} class={`px-3 py-1 text-xs font-bold rounded ${filterRole === 'hod' ? 'bg-purple-600 text-white' : 'bg-gray-100'}`}>HOD links</button>
+                    </div>
+
+                    <div class="bg-white border rounded-lg shadow-sm overflow-hidden">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                                <tr>
+                                    <th class="px-4 py-3">Link Text</th>
+                                    <th class="px-4 py-3">Target</th>
+                                    <th class="px-4 py-3">URL</th>
+                                    <th class="px-4 py-3">Order</th>
+                                    <th class="px-4 py-3 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                {filteredLinks.map(l => (
+                                    <tr key={l.id} class={!l.active ? 'opacity-50 bg-gray-50' : ''}>
+                                        <td class="px-4 py-3 font-medium">
+                                            {l.link_text}
+                                            {!l.active && <span class="ml-2 text-[10px] bg-red-100 text-red-800 px-1 py-0.5 rounded">HIDDEN</span>}
+                                            <div class="text-xs text-gray-400 mt-1 truncate max-w-xs">{l.description || '—'}</div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${l.target_role === 'tutor' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                                {l.target_role}
+                                            </span>
+                                            <div class="text-[10px] text-gray-500 mt-1 px-1">{l.section}</div>
+                                        </td>
+                                        <td class="px-4 py-3 text-xs">
+                                            <div class="flex items-center gap-2">
+                                                <a href={l.sop_url} target="_blank" rel="noopener" class="text-blue-600 bg-blue-50 px-2 py-1 rounded text-[10px] uppercase font-bold hover:bg-blue-100 transition-colors shrink-0">Preview ↗</a>
+                                                <span class="text-gray-400 truncate inline-block max-w-[150px]">{l.sop_url}</span>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 text-xs text-center">{l.display_order}</td>
+                                        <td class="px-4 py-3 text-right space-x-2">
+                                            <button onClick={() => openModal(l)} class="text-blue-600 underline text-xs">Edit</button>
+                                            {l.active && <button onClick={() => deleteLink(l.id)} class="text-red-600 underline text-xs">Hide</button>}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {filteredLinks.length === 0 && (
+                                    <tr><td colSpan="5" class="px-4 py-8 text-center text-gray-400">No SOP links found.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {showModal && (
+                        <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                            <div class="bg-white rounded-xl shadow-lg w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+                                <h3 class="text-lg font-bold mb-4">{editingLink ? 'Edit SOP Link' : 'Add New SOP Link'}</h3>
+                                {err && <div class="bg-red-50 text-red-600 text-xs p-3 rounded mb-4">{err}</div>}
+
+                                <form onSubmit={saveLink} class="space-y-4">
+                                    <div>
+                                        <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Link Text *</label>
+                                        <input name="link_text" defaultValue={editingLink?.link_text} required class="w-full border p-2 rounded text-sm focus:border-black outline-none" placeholder="e.g. Class Planning Guide" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold uppercase text-gray-500 mb-1">SOP URL *</label>
+                                        <input name="sop_url" defaultValue={editingLink?.sop_url} required class="w-full border p-2 rounded text-sm focus:border-black outline-none" placeholder="https://notion.so/..." />
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Description</label>
+                                        <input name="description" defaultValue={editingLink?.description} class="w-full border p-2 rounded text-sm focus:border-black outline-none" placeholder="Short description" />
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Target Role *</label>
+                                            <select name="target_role" defaultValue={editingLink?.target_role || 'tutor'} required class="w-full border p-2 rounded text-sm focus:border-black outline-none bg-white">
+                                                <option value="tutor">Tutor</option>
+                                                <option value="hod">HOD</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Section *</label>
+                                            <select name="section" defaultValue={editingLink?.section || 'overview'} required class="w-full border p-2 rounded text-sm focus:border-black outline-none bg-white">
+                                                <option value="overview">Overview Dashboard</option>
+                                                <option value="form_helper">Form Helper</option>
+                                                <option value="notification">Notifications</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-xs font-bold uppercase text-gray-500 mb-1">Display Order</label>
+                                            <input type="number" name="display_order" defaultValue={editingLink?.display_order || 0} class="w-full border p-2 rounded text-sm focus:border-black outline-none" />
+                                        </div>
+                                        {editingLink && (
+                                            <div class="flex items-center pt-5">
+                                                <label class="flex items-center gap-2 cursor-pointer">
+                                                    <input type="checkbox" name="active" defaultChecked={editingLink.active} class="w-4 h-4 accent-black" />
+                                                    <span class="text-sm font-medium">Active</span>
+                                                </label>
+                                            </div>
+                                        )}
+                                        {!editingLink && (
+                                            <input type="hidden" name="active" value="on" />
+                                        )}
+                                    </div>
+
+                                    <div class="flex gap-2 pt-4 border-t mt-6">
+                                        <button type="submit" class="flex-1 bg-black text-white px-4 py-2 rounded text-sm font-bold">Save Link</button>
+                                        <button type="button" onClick={closeModal} class="px-4 py-2 rounded text-sm font-bold border text-gray-600 hover:bg-gray-50">Cancel</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── Inbox View (Week 5) ───────────────────────────────────────────────
+        function InboxView({ user }) {
+            const [notifs, setNotifs] = useState([]);
+            const load = () => api.getNotifications(user.role).then(d => setNotifs(d.notifications));
+            useEffect(load, []);
+
+            const markRead = (id) => api.markNotificationRead(id).then(load).catch(e => alert(e.message));
+
+            return (
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">My Inbox</p>
+                    </div>
+                    {notifs.map(n => (
+                        <div key={n.id} class={`p-4 border rounded-xl shadow-sm text-sm flex justify-between items-start transition-colors ${n.read_status === 'unread' ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100'}`}>
+                            <div>
+                                <div class={`font-medium ${n.read_status === 'unread' ? 'text-blue-900' : 'text-gray-600'}`}>{n.message}</div>
+                                <div class={`text-xs mt-1 ${n.read_status === 'unread' ? 'text-blue-500' : 'text-gray-400'}`}>{new Date(n.created_at).toLocaleString()}</div>
+                            </div>
+                            {n.read_status === 'unread' && (
+                                <button onClick={() => markRead(n.id)} class="text-[10px] bg-blue-600 text-white px-3 py-1.5 rounded font-black uppercase ml-4 shrink-0 hover:bg-blue-700 transition-colors">Mark Read</button>
+                            )}
+                        </div>
+                    ))}
+                    {notifs.length === 0 && <div class="py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">Inbox is empty. You're all caught up.</div>}
+                </div>
+            );
+        }
+
+        // ── Content Manager Queue ─────────────────────────────────────────────
+        function ContentManagerQueue({ user }) {
+            const [allAssets, setAllAssets] = useState([]);
+            const [cmTab, setCmTab] = useState('free');
+            const load = () => { api.getAssets().then(d => setAllAssets(d.assets)); };
+            useEffect(load, []);
+            const publish = (id) => api.publishAsset(id).then(load).catch(e => alert(e.message));
+            const requestRevision = (asset) => {
+                const reason = prompt(`Request revision for "${asset.topic}"\n\nReason for revision:`);
+                if (!reason) return;
+                api.requestRevision(asset.id, reason).then(load).catch(e => alert(e.message));
+            };
+
+            const freeAssets = allAssets.filter(a => a.asset_category === 'free_asset');
+            const hubAssets = allAssets.filter(a => a.asset_category === 'hub_asset');
+
+            return (
+                <div>
+                    <h2 class="font-bold mb-4 text-xs uppercase text-gray-400 tracking-widest">Asset Publish Queue</h2>
+                    <div class="flex gap-2 mb-6">
+                        <button
+                            onClick={() => setCmTab('free')}
+                            class={`px-4 py-2 rounded text-sm font-bold ${cmTab === 'free' ? 'bg-blue-600 text-white' : 'border text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            📹 Free Content ({freeAssets.filter(a => a.status === 'approved').length} ready)
+                        </button>
+                        <button
+                            onClick={() => setCmTab('hub')}
+                            class={`px-4 py-2 rounded text-sm font-bold ${cmTab === 'hub' ? 'bg-black text-white' : 'border text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            📚 Hub Resources ({hubAssets.filter(a => a.status === 'pending_cm' || a.status === 'approved').length} ready)
+                        </button>
+                    </div>
+
+                    {cmTab === 'free' && (
+                        <div class="space-y-4">
+                            <div class="p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800 mb-2">
+                                <strong>Free Class Content</strong> — Repurpose for YouTube/social platforms. Publish when edit is complete.
+                            </div>
+                            {freeAssets.map(a => (
+                                <div key={a.id} class={`border p-5 rounded-lg bg-white shadow-sm ${a.status === 'approved' ? 'border-blue-200' : a.status === 'needs_revision' ? 'border-orange-200 bg-orange-50' : 'border-green-200'}`}>
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <p class="text-xs font-bold text-gray-400 uppercase mb-1">{a.subject} · {a.asset_type} · 📹 Free</p>
+                                            <h3 class="font-bold">{a.topic}</h3>
+                                            <p class="text-xs text-gray-400">By {a.tutor_name}</p>
+                                        </div>
+                                        <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{a.status.replace(/_/g, ' ')}</span>
+                                    </div>
+                                    <a href={a.drive_link} target="_blank" class="text-xs text-blue-600 underline mt-2 block">Open Drive Link ↗</a>
+
+                                    {a.tutor_notes && (
+                                        <div class="bg-gray-50 border-l-4 border-blue-500 p-3 mt-3 rounded">
+                                            <p class="text-xs font-bold text-gray-700 mb-1">📝 Tutor Notes/Instructions:</p>
+                                            <p class="text-sm text-gray-600 whitespace-pre-wrap italic">{a.tutor_notes}</p>
+                                        </div>
+                                    )}
+
+                                    {a.status === 'approved' && (
+                                        <div class="flex gap-2 mt-4">
+                                            <button onClick={() => publish(a.id)} class="bg-blue-600 text-white px-4 py-2 rounded text-xs font-bold uppercase hover:bg-blue-700">Mark Published</button>
+                                            <button onClick={() => requestRevision(a)} class="border border-orange-400 text-orange-600 px-4 py-2 rounded text-xs font-bold uppercase hover:bg-orange-50">Request Revision</button>
+                                        </div>
+                                    )}
+                                    {a.status === 'published' && <p class="text-[10px] text-blue-600 mt-4 font-bold uppercase tracking-widest">✓ Published {new Date(a.published_at).toLocaleDateString()}</p>}
+                                    {a.status === 'needs_revision' && <p class="text-[10px] text-orange-600 mt-4 font-bold uppercase tracking-widest">↩ Revision Requested</p>}
+                                </div>
+                            ))}
+                            {freeAssets.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded-xl text-gray-400 italic text-sm">No free content received yet.</div>}
+                        </div>
+                    )}
+
+                    {cmTab === 'hub' && (
+                        <div class="space-y-4">
+                            <div class="p-3 bg-green-50 border border-green-200 rounded text-xs text-green-800 mb-2">
+                                <strong>Hub Resources</strong> — Tutor submissions for quality review. Approve & publish to Study Hub.
+                            </div>
+                            {hubAssets.map(a => (
+                                <div key={a.id} class={`border p-5 rounded-lg bg-white shadow-sm ${a.status === 'approved' ? 'border-green-200' : 'border-gray-200'}`}>
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <p class="text-xs font-bold text-gray-400 uppercase mb-1">{a.subject} · {a.asset_type} · 📚 Hub</p>
+                                            <h3 class="font-bold">{a.topic}</h3>
+                                            <p class="text-xs text-gray-400">By {a.tutor_name}</p>
+                                        </div>
+                                        <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{a.status.replace(/_/g, ' ')}</span>
+                                    </div>
+                                    <a href={a.drive_link} target="_blank" class="text-xs text-blue-600 underline mt-2 block">Open Drive Link ↗</a>
+                                    {a.destination_path && <p class="text-xs text-gray-400 mt-1">→ {a.destination_path}</p>}
+
+                                    {a.tutor_notes && (
+                                        <div class="bg-gray-50 border-l-4 border-blue-500 p-3 mt-3 rounded">
+                                            <p class="text-xs font-bold text-gray-700 mb-1">📝 Tutor Notes/Instructions:</p>
+                                            <p class="text-sm text-gray-600 whitespace-pre-wrap italic">{a.tutor_notes}</p>
+                                        </div>
+                                    )}
+
+                                    {(a.status === 'pending_cm' || a.status === 'approved') && (
+                                        <button onClick={() => publish(a.id)} class="mt-4 bg-green-600 text-white px-4 py-2 rounded text-xs font-bold uppercase hover:bg-green-700">Approve & Publish to Hub</button>
+                                    )}
+                                    {a.status === 'published' && <p class="text-[10px] text-green-600 mt-4 font-bold uppercase tracking-widest">✓ Published {new Date(a.published_at).toLocaleDateString()}</p>}
+                                </div>
+                            ))}
+                            {hubAssets.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded-xl text-gray-400 italic text-sm">No hub assets to publish.</div>}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── Campaign View (Tutor + HOD) ─────────────────────────────────────
+        function CampaignView({ user }) {
+            const [campaigns, setCampaigns] = useState([]);
+            const [notifs, setNotifs] = useState([]);
+            const [showNew, setShowNew] = useState(false);
+            const load = () => {
+                api.getCampaigns().then(d => setCampaigns(d.campaigns));
+                api.getNotifications(user.role).then(d => setNotifs(d.notifications));
+            };
+            useEffect(load, []);
+            return (
+                <div>
+                    {user.role === 'tutor' && <button onClick={() => setShowNew(true)} class="mb-6 bg-black text-white px-4 py-2 rounded text-sm">+ New Campaign</button>}
+                    {showNew && <CampaignForm onCancel={() => setShowNew(false)} onSuccess={() => { setShowNew(false); load(); }} />}
+                    <div class="space-y-4">
+                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">Active Gate Queue</p>
+                        {campaigns.map(c => <CampaignCard key={c.id} campaign={c} userRole={user.role} onUpdate={load} />)}
+                        {campaigns.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded text-gray-400">Nothing in the queue.</div>}
+                    </div>
+                    {notifs.length > 0 && (
+                        <div class="mt-10 pt-8 border-t">
+                            <p class="text-xs font-bold uppercase text-gray-400 tracking-widest mb-4">My Feed</p>
+                            <div class="space-y-2">
+                                {notifs.map(n => <div key={n.id} class="text-sm text-gray-600 border-l-2 border-gray-200 pl-4 py-1">{n.message}<span class="text-gray-400 text-xs ml-2">— {new Date(n.created_at).toLocaleDateString()}</span></div>)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function CampaignForm({ onCancel, onSuccess }) {
+            const [form, setForm] = useState({ subject: '', topic: '', trick_pattern: '', outcomes: '', target_date: '' });
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [success, setSuccess] = useState(false);
+
+            const submit = (e) => {
+                e.preventDefault();
+                setIsSubmitting(true);
+                api.createCampaign(form)
+                    .then(() => {
+                        setSuccess(true);
+                        setTimeout(onSuccess, 1500);
+                    })
+                    .catch(e => {
+                        setIsSubmitting(false);
+                        alert(e.message);
+                    });
+            };
+
+            if (success) return (
+                <div class="bg-green-50 border border-green-200 p-8 rounded-lg mb-6 text-center text-green-700 animate-pulse">
+                    <p class="text-lg font-bold">✓ Campaign Submitted Successfully</p>
+                    <p class="text-sm">Sent to HOD for review...</p>
+                </div>
+            );
+
+            return (
+                <form onSubmit={submit} class="bg-white border p-6 rounded-lg mb-6 shadow-sm">
+                    <h3 class="font-bold mb-4 italic">Campaign Intake</h3>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <input placeholder="Subject/Course (e.g. G12 Math)" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, subject: e.target.value })} required />
+                        <input type="date" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, target_date: e.target.value })} />
+                    </div>
+                    <input placeholder="Campaign Topic" class="w-full border p-2 rounded mb-4 text-sm" onChange={e => setForm({ ...form, topic: e.target.value })} required />
+
+                    <div class="relative mb-4">
+                        <textarea placeholder="Examiner Trick/Pattern" class="w-full border p-2 rounded text-sm h-16" maxLength="500" onChange={e => setForm({ ...form, trick_pattern: e.target.value })} />
+                        <span class="absolute right-2 bottom-2 text-[10px] text-gray-400">{form.trick_pattern.length}/500</span>
+                    </div>
+
+                    <div class="relative mb-4">
+                        <textarea placeholder="Target Learning Outcomes" class="w-full border p-2 rounded text-sm h-16" maxLength="500" onChange={e => setForm({ ...form, outcomes: e.target.value })} />
+                        <span class="absolute right-2 bottom-2 text-[10px] text-gray-400">{form.outcomes.length}/500</span>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button disabled={isSubmitting} class="bg-blue-600 text-white px-6 py-2 rounded text-sm font-medium disabled:bg-gray-400">
+                            {isSubmitting ? 'Submitting...' : 'Submit to HOD'}
+                        </button>
+                        <button type="button" onClick={onCancel} class="text-gray-500 px-4 py-2 text-sm">Cancel</button>
+                    </div>
+                </form>
+            );
+        }
+
+        function CampaignCard({ campaign, userRole, onUpdate }) {
+            const [reason, setReason] = useState('');
+            const [showReject, setShowReject] = useState(false);
+            const action = (status) => api.updateCampaign(campaign.id, status, reason).then(onUpdate).catch(e => alert(e.message));
+            const colors = { draft: '', pending_approval: 'border-yellow-200 bg-yellow-50', approved: 'border-green-200 bg-green-50', rejected: 'border-red-200 bg-red-50' };
+            return (
+                <div class={`border p-5 rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow ${colors[campaign.status]}`}>
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex gap-4">
+                            <div class="hidden md:flex flex-col items-center justify-center p-2 rounded bg-gray-50 border w-12 h-12 shrink-0">
+                                <span class="text-[10px] font-black text-gray-400 uppercase leading-none">ROI</span>
+                                <span class={`text-sm font-black mt-1 ${campaign.outcome_status === 'improved' ? 'text-green-600' : 'text-gray-400'}`}>
+                                    {campaign.outcome_status === 'improved' ? '↑' : '—'}
+                                </span>
+                            </div>
+                            <div>
+                                <p class="text-xs font-bold text-gray-400 uppercase mb-1">{campaign.subject}</p>
+                                <h3 class="text-lg font-bold">{campaign.topic}</h3>
+                                <p class="text-xs text-gray-400">By {campaign.tutor_name} · Target: {campaign.target_date || 'TBD'}</p>
+                            </div>
+                        </div>
+                        <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{campaign.status.replace('_', ' ')}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-3">
+                        <div><p class="text-[10px] font-bold text-gray-400 uppercase">Trick Pattern</p><p class="text-xs mt-1">{campaign.trick_pattern || '—'}</p></div>
+                        <div><p class="text-[10px] font-bold text-gray-400 uppercase">Outcomes</p><p class="text-xs mt-1">{campaign.outcomes || '—'}</p></div>
+                    </div>
+                    {campaign.status === 'rejected' && <div class="p-3 bg-red-100 border border-red-200 rounded text-xs text-red-700 font-medium">REJECTION REASON: {campaign.hod_rejection_reason}</div>}
+
+                    {campaign.status === 'approved' && userRole === 'tutor' && !campaign.outcome_log && (
+                        <div class="mt-4 border-t pt-4">
+                            <p class="text-[10px] font-black uppercase text-gray-400 mb-2">Final Outcome Verification</p>
+                            <textarea
+                                placeholder="Summary of actual results... (e.g. 80% students mastered trick pattern)"
+                                class="w-full border p-2 rounded text-xs mb-2"
+                                id={`log-${campaign.id}`}
+                            />
+                            <div class="flex items-center gap-4">
+                                <select id={`status-${campaign.id}`} class="border p-2 rounded text-xs bg-white">
+                                    <option value="improved">Performance: Improved</option>
+                                    <option value="no_change">Performance: No Change</option>
+                                    <option value="worse">Performance: Worse</option>
+                                </select>
+                                <button
+                                    onClick={() => {
+                                        const log = document.getElementById(`log-${campaign.id}`).value;
+                                        const status = document.getElementById(`status-${campaign.id}`).value;
+                                        api.logCampaignOutcome(campaign.id, { outcome_log: log, outcome_status: status }).then(onUpdate);
+                                    }}
+                                    class="bg-black text-white px-4 py-2 rounded text-[10px] font-black uppercase"
+                                >
+                                    LOG FINAL OUTCOME
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {campaign.outcome_log && (
+                        <div class="mt-4 p-4 rounded-lg bg-gray-900 text-white">
+                            <div class="flex justify-between items-center mb-2">
+                                <p class="text-[9px] font-black uppercase tracking-widest text-gray-400">Campaign Outcome</p>
+                                <span class={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${campaign.outcome_status === 'improved' ? 'bg-green-500' : campaign.outcome_status === 'worse' ? 'bg-red-500' : 'bg-yellow-500'}`}>{campaign.outcome_status}</span>
+                            </div>
+                            <p class="text-xs leading-relaxed italic">"{campaign.outcome_log}"</p>
+                            <p class="text-[9px] text-gray-500 mt-2">Verified: {campaign.actual_completion_date ? new Date(campaign.actual_completion_date).toLocaleDateString() : 'Just now'}</p>
+                        </div>
+                    )}
+
+                    {userRole === 'hod' && campaign.status === 'pending_approval' && !showReject && (
+                        <div class="mt-4 flex gap-2">
+                            <button onClick={() => action('approved')} class="bg-green-600 text-white px-4 py-2 rounded text-xs font-bold flex items-center gap-2 hover:bg-green-700 transition-colors">
+                                <span>✅</span> APPROVE GATE
+                            </button>
+                            <button onClick={() => setShowReject(true)} class="bg-red-600 text-white px-4 py-2 rounded text-xs font-bold flex items-center gap-2 hover:bg-red-700 transition-colors">
+                                <span>❌</span> REJECT
+                            </button>
+                        </div>
+                    )}
+                    {showReject && (
+                        <div class="mt-4">
+                            <textarea placeholder="Reason for rejection..." class="w-full border p-2 rounded text-xs mb-2" onChange={e => setReason(e.target.value)} />
+                            <div class="flex gap-2">
+                                <button onClick={() => action('rejected')} class="bg-red-600 text-white px-4 py-2 rounded text-xs font-bold">CONFIRM REJECTION</button>
+                                <button onClick={() => setShowReject(false)} class="text-xs underline text-gray-500">Cancel</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── Asset View (Tutor + HOD) ────────────────────────────────────────
+        function AssetView({ user }) {
+            const [assets, setAssets] = useState([]);
+            const [notifs, setNotifs] = useState([]);
+            const [showNew, setShowNew] = useState(false);
+            const load = () => {
+                api.getAssets().then(d => setAssets(d.assets));
+                api.getNotifications(user.role).then(d => setNotifs(d.notifications));
+            };
+            useEffect(load, []);
+
+            // HOD: only show hub_asset category assets
+            const visibleAssets = user.role === 'hod'
+                ? assets.filter(a => a.asset_category === 'hub_asset')
+                : assets;
+
+            return (
+                <div>
+                    {user.role === 'tutor' && <button onClick={() => setShowNew(true)} class="mb-6 bg-black text-white px-4 py-2 rounded text-sm">+ Upload Asset</button>}
+                    {showNew && <AssetForm onCancel={() => setShowNew(false)} onSuccess={() => { setShowNew(false); load(); }} />}
+
+                    <div class="space-y-4">
+                        {user.role === 'hod' && (
+                            <div class="p-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-700 mb-2">
+                                Free class recordings go directly to Content Manager for YouTube/social repurposing. Only Study Hub materials require your review.
+                            </div>
+                        )}
+                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">Asset Queue</p>
+                        {visibleAssets.map(a => <AssetCard key={a.id} asset={a} userRole={user.role} onUpdate={load} />)}
+                        {visibleAssets.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded text-gray-400">No assets pending review.</div>}
+                    </div>
+
+                    {notifs.length > 0 && (
+                        <div class="mt-10 pt-8 border-t">
+                            <p class="text-xs font-bold uppercase text-gray-400 tracking-widest mb-4">My Feed</p>
+                            <div class="space-y-2">
+                                {notifs.map(n => <div key={n.id} class="text-sm text-gray-600 border-l-2 border-gray-200 pl-4 py-1">{n.message}<span class="text-gray-400 text-xs ml-2">— {new Date(n.created_at).toLocaleDateString()}</span></div>)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function AssetForm({ onCancel, onSuccess }) {
+            const ASSET_TYPES = [
+                { value: 'slides', label: 'Slides' },
+                { value: 'worksheet', label: 'Worksheet' },
+                { value: 'recording', label: 'Recording' },
+                { value: 'marking_key', label: 'Marking Key' },
+                { value: 'practice_bank', label: 'Practice Bank' },
+                { value: 'other', label: 'Other' },
+            ];
+            const [subject, setSubject] = useState('');
+            const [tutorNotes, setTutorNotes] = useState('');
+            const [topic, setTopic] = useState('');
+            const [selectedCategory, setSelectedCategory] = useState(null);
+            const [selected, setSelected] = useState({}); // { asset_type: drive_link }
+            const [err, setErr] = useState('');
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [success, setSuccess] = useState(false);
+
+            const toggleType = (type) => {
+                setSelected(prev => {
+                    const next = { ...prev };
+                    if (next[type] !== undefined) delete next[type];
+                    else next[type] = '';
+                    return next;
+                });
+            };
+            const setLink = (type, val) => setSelected(prev => ({ ...prev, [type]: val }));
+
+            const checkedCount = Object.keys(selected).length;
+            const minReq = 1; // Both free_asset and hub_asset require minimum 1 asset
+            const allLinked = checkedCount >= minReq && Object.values(selected).every(v => v.trim() !== '');
+
+            const submit = (e) => {
+                e.preventDefault();
+                setErr('');
+                if (!selectedCategory) {
+                    alert('Please select an asset category before submitting.');
+                    return;
+                }
+                if (checkedCount < minReq) { setErr(`Select at least ${minReq} asset type${minReq > 1 ? 's' : ''}.`); return; }
+                if (!allLinked) { setErr('Add a Drive link for each selected asset type.'); return; }
+
+                const suspicious = {
+                    'free_asset': ['worksheet', 'exam', 'quiz', 'practice_bank', 'marking_key'],
+                    'hub_asset': ['recording', 'video', 'lecture']
+                };
+                const hasMismatch = Object.keys(selected).some(t => suspicious[selectedCategory]?.includes(t));
+                if (hasMismatch) {
+                    const msg = selectedCategory === 'free_asset'
+                        ? 'This looks like student material, not a class recording. Did you mean Hub Resource?'
+                        : 'This looks like a class recording. Did you mean Free Class Content?';
+                    if (!confirm(`⚠️ ${msg}\n\nDo you want to continue anyway?`)) return;
+                }
+
+                setIsSubmitting(true);
+                const driveLinks = Object.values(selected);
+                api.request('/assets/check-duplicate', { method: 'POST', body: JSON.stringify({ driveLinks }) })
+                    .then(data => {
+                        if (data.exists) {
+                            const existingCat = data.category === 'hub_asset' ? 'Hub Resource' : 'Free Class Content';
+                            if (!confirm(`You already uploaded one of these files as "${data.title}" (${existingCat}).\n\nAre you sure you want to upload it again with a different category?`)) {
+                                throw new Error('Canceled submission');
+                            }
+                        }
+                        const batch = Object.entries(selected).map(([asset_type, drive_link]) => ({
+                            subject, topic, asset_type, drive_link, asset_category: selectedCategory,
+                            tutor_notes: tutorNotes || null
+                        }));
+                        return api.request('/assets', { method: 'POST', body: JSON.stringify(batch) });
+                    })
+                    .then(res => {
+                        if (res) {
+                            setSuccess(true);
+                            setTimeout(onSuccess, 1500);
+                        }
+                    })
+                    .catch(e => {
+                        setIsSubmitting(false);
+                        if (e.message !== 'Canceled submission') setErr(e.message);
+                    });
+            };
+
+            if (success) return (
+                <div class="bg-blue-50 border border-blue-200 p-8 rounded-lg mb-6 text-center text-blue-700 animate-pulse">
+                    <p class="text-lg font-bold">✓ Assets Uploaded Successfully</p>
+                    <p class="text-sm">Notifying Content Manager...</p>
+                </div>
+            );
+
+            return (
+                <form onSubmit={submit} class="bg-white border p-6 rounded-lg mb-6 shadow-sm">
+                    <h3 class="font-bold mb-1 italic">Asset Submission</h3>
+
+                    <div class="mb-6 mt-4">
+                        <label class="block font-bold text-sm mb-2 text-gray-700">Asset Category <span class="text-red-500">*</span></label>
+                        <div class="flex flex-col gap-3">
+                            <label class="flex items-start gap-3 p-3 border rounded cursor-pointer hover:bg-gray-50 bg-white">
+                                <input type="radio" name="asset_category" value="free_asset" class="mt-1" onChange={() => setSelectedCategory('free_asset')} required />
+                                <div>
+                                    <span class="font-bold text-sm block">📹 Free Class Content</span>
+                                    <span class="text-xs text-gray-500 block">YouTube/Social repurposing</span>
+                                </div>
+                            </label>
+                            <label class="flex items-start gap-3 p-3 border rounded cursor-pointer hover:bg-gray-50 bg-white">
+                                <input type="radio" name="asset_category" value="hub_asset" class="mt-1" onChange={() => setSelectedCategory('hub_asset')} required />
+                                <div>
+                                    <span class="font-bold text-sm block">📚 Hub Resource</span>
+                                    <span class="text-xs text-gray-500 block">Study Hub material - requires Content Manager approval</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        {selectedCategory === 'free_asset' && (
+                            <div class="mt-3 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded text-xs space-y-1">
+                                <strong class="block mb-1">Selected: Free Class Content</strong>
+                                <p>→ Goes directly to Content Manager for repurposing</p>
+                                <p>→ Will be edited for YouTube/social platforms</p>
+                                <p>→ No additional approval needed</p>
+                                <p>→ You'll be notified when published</p>
+                            </div>
+                        )}
+
+                        {selectedCategory === 'hub_asset' && (
+                            <div class="mt-3 p-3 bg-green-50 border border-green-200 text-green-800 rounded text-xs space-y-1">
+                                <strong class="block mb-1">Selected: Hub Resource</strong>
+                                <p>→ Goes to Content Manager for quality review</p>
+                                <p>→ Content Manager approves & publishes to Study Hub</p>
+                                <p>→ You'll be notified when approved AND when published</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {selectedCategory && <p class="text-xs text-gray-400 mb-4">Select <strong>at least {minReq}</strong> asset type{minReq > 1 ? 's' : ''} and provide a Drive link for each.</p>}
+                    {!selectedCategory && <p class="text-xs text-gray-400 mb-4">Select a category above to continue.</p>}
+
+                    {err && <div class="bg-red-50 text-red-600 p-3 rounded mb-4 text-xs">{err}</div>}
+
+                    <div class={`transition-opacity duration-200 ${!selectedCategory ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                        <div class="grid grid-cols-2 gap-4 mb-5">
+                            <input placeholder="Subject/Course (e.g. Math, Biology)" class="border p-2 rounded text-sm" onChange={e => setSubject(e.target.value)} required />
+                            <input placeholder="Topic" class="border p-2 rounded text-sm" onChange={e => setTopic(e.target.value)} required />
+                        </div>
+                        <div class="space-y-3 mb-5">
+                            {ASSET_TYPES.map(({ value, label }) => (
+                                <div key={value}>
+                                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            class="w-4 h-4 accent-black"
+                                            checked={selected[value] !== undefined}
+                                            onChange={() => toggleType(value)}
+                                        />
+                                        <span class="text-sm font-medium">{label}</span>
+                                    </label>
+                                    {selected[value] !== undefined && (
+                                        <input
+                                            placeholder={`Google Drive link for ${label}`}
+                                            class="mt-1 ml-6 w-[calc(100%-1.5rem)] border p-2 rounded text-xs"
+                                            value={selected[value]}
+                                            onChange={e => setLink(value, e.target.value)}
+                                            required
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <div class="mt-2 relative">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Tutor Notes (Optional)</label>
+                            <textarea
+                                class="w-full border p-2 rounded text-xs text-gray-700 resize-none"
+                                rows="3"
+                                maxLength="300"
+                                placeholder="Instructions for reviewers: timestamps to focus on, sections to skip, context about the content, etc."
+                                onChange={e => setTutorNotes(e.target.value)}
+                            />
+                            <span class="absolute right-2 bottom-2 text-[9px] text-gray-400">{tutorNotes.length}/300</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <button
+                                class={`px-6 py-2 rounded text-sm font-medium text-white ${(allLinked && selectedCategory && !isSubmitting) ? 'bg-blue-600' : 'bg-gray-300 cursor-not-allowed'}`}
+                                disabled={!allLinked || !selectedCategory || isSubmitting}
+                            >
+                                {isSubmitting ? 'Uploading...' : `Submit ${checkedCount > 0 ? `(${checkedCount} asset${checkedCount > 1 ? 's' : ''})` : ''}`}
+                            </button>
+                            <span class={`text-xs ${checkedCount >= minReq ? 'text-green-600' : 'text-gray-400'}`}>
+                                {checkedCount}/{minReq} minimum selected
+                            </span>
+                            <button type="button" onClick={onCancel} class="text-gray-500 text-sm ml-auto">Cancel</button>
+                        </div>
+                    </div>
+                </form>
+            );
+        }
+
+        function AssetCard({ asset, userRole, onUpdate }) {
+            const [feedback, setFeedback] = useState('');
+            const [showReject, setShowReject] = useState(false);
+            const action = (status) => api.updateAsset(asset.id, status, feedback).then(onUpdate).catch(e => alert(e.message));
+            const colors = { pending_hod: 'border-yellow-200 bg-yellow-50', approved: 'border-blue-200 bg-blue-50', rejected: 'border-red-200 bg-red-50', published: 'border-green-200 bg-green-50' };
+            return (
+                <div class={`border p-5 rounded-lg bg-white shadow-sm ${colors[asset.status]}`}>
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <p class="text-xs font-bold text-gray-400 uppercase mb-1">{asset.subject} · {asset.asset_type}</p>
+                            <h3 class="text-lg font-bold">{asset.topic}</h3>
+                            <p class="text-xs text-gray-400">By {asset.tutor_name}</p>
+                        </div>
+                        <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{asset.status.replace('_', ' ')}</span>
+                    </div>
+                    <a href={asset.drive_link} target="_blank" class="text-xs text-blue-600 underline">Open Drive Link ↗</a>
+                    {asset.destination_path && <p class="text-xs text-gray-400 mt-1">→ {asset.destination_path}</p>}
+                    {asset.tutor_notes && (
+                        <div class="mt-3 p-3 rounded border-l-4 border-l-blue-400 bg-blue-50 text-xs text-blue-800">
+                            <p class="font-bold uppercase tracking-widest text-[9px] text-blue-500 mb-1">Tutor Notes</p>
+                            <p class="italic">{asset.tutor_notes}</p>
+                        </div>
+                    )}
+                    {asset.hod_feedback && <div class={`mt-3 p-3 rounded text-xs font-medium ${asset.status === 'rejected' ? 'bg-red-100 border border-red-200 text-red-700' : 'bg-gray-50 border text-gray-600'}`}>HOD FEEDBACK: {asset.hod_feedback}</div>}
+                    {userRole === 'hod' && asset.status === 'pending_hod' && !showReject && (
+                        <div class="mt-4 flex gap-2">
+                            <button onClick={() => action('approved')} class="bg-blue-600 text-white px-4 py-2 rounded text-xs font-bold">APPROVE ASSET</button>
+                            <button onClick={() => setShowReject(true)} class="bg-red-600 text-white px-4 py-2 rounded text-xs font-bold">REJECT</button>
+                        </div>
+                    )}
+                    {showReject && (
+                        <div class="mt-4">
+                            <textarea placeholder="Feedback for tutor (required)..." class="w-full border p-2 rounded text-xs mb-2" onChange={e => setFeedback(e.target.value)} />
+                            <div class="flex gap-2">
+                                <button onClick={() => action('rejected')} class="bg-red-600 text-white px-4 py-2 rounded text-xs font-bold">CONFIRM REJECTION</button>
+                                <button onClick={() => setShowReject(false)} class="text-xs underline text-gray-500">Cancel</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // ── Week 3: Calendar Mapping (Assessments) ──────────────────────────
+        function AssessmentMap({ user }) {
+            const [items, setItems] = useState([]);
+            const [showAdd, setShowAdd] = useState(false);
+            const load = () => api.getAssessments().then(d => setItems(d.assessments));
+            useEffect(load, []);
+
+            return (
+                <div>
+                    <div class="flex justify-between items-center mb-6">
+                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">Term Milestone Map</p>
+                        {user.role !== 'admin' && <button onClick={() => setShowAdd(true)} class="bg-black text-white px-3 py-1 rounded text-xs font-bold">+ New Assessment</button>}
+                    </div>
+                    {showAdd && <AssessmentForm onCancel={() => setShowAdd(false)} onSuccess={() => { load(); setShowAdd(false); }} />}
+                    <div class="space-y-3">
+                        {items.map(m => (
+                            <div key={m.id} class={`p-4 rounded-lg border-l-4 bg-white shadow-sm border ${m.pressure_level === 'high' ? 'border-l-red-500' : m.pressure_level === 'medium' ? 'border-l-orange-400' : 'border-l-blue-400'}`}>
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h4 class="font-bold text-sm">{m.subject} — {m.type.toUpperCase()}</h4>
+                                        <p class="text-[10px] text-gray-500">{m.institution} • {m.campaign_window || 'No Window'}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-xs font-bold">{new Date(m.date).toLocaleDateString()}</p>
+                                        <span class={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${m.pressure_level === 'high' ? 'bg-red-50 text-red-600' : 'bg-gray-50 text-gray-500'}`}>{m.pressure_level} Pressure</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        function AssessmentForm({ onCancel, onSuccess }) {
+            const [f, setF] = useState({ subject: '', institution: '', type: 'exam', date: '', campaign_window: '' });
+            const submit = (e) => { e.preventDefault(); api.createAssessment(f).then(onSuccess).catch(e => alert(e.message)); };
+            return (
+                <form onSubmit={submit} class="bg-white border p-4 rounded-lg mb-6 shadow-sm text-sm space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <input placeholder="Subject/Course (e.g. G12 Math)" class="border p-2 rounded" onChange={e => setF({ ...f, subject: e.target.value })} required />
+                        <input placeholder="Institution" class="border p-2 rounded" onChange={e => setF({ ...f, institution: e.target.value })} required />
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <select class="border p-2 rounded" onChange={e => setF({ ...f, type: e.target.value })}>
+                            <option value="exam">Exam</option>
+                            <option value="mock">Mock</option>
+                            <option value="test">Test</option>
+                            <option value="quiz">Quiz</option>
+                            <option value="topic">Topic</option>
+                        </select>
+                        <input type="date" class="border p-2 rounded" onChange={e => setF({ ...f, date: e.target.value })} required />
+                    </div>
+                    <input placeholder="Campaign Window (e.g. Term 1 Wk 5)" class="w-full border p-2 rounded" onChange={e => setF({ ...f, campaign_window: e.target.value })} />
+                    <div class="flex gap-2">
+                        <button class="bg-black text-white px-4 py-2 rounded text-xs font-bold">SAVE TO MAP</button>
+                        <button type="button" onClick={onCancel} class="text-xs text-gray-500 underline">Cancel</button>
+                    </div>
+                </form>
+            );
+        }
+
+        // ── Week 3: Support Sessions ──────────────────────────────────────
+        function SupportSessions({ user }) {
+            const [sessions, setSessions] = useState([]);
+            const [showAdd, setShowAdd] = useState(false);
+            const load = () => api.request('/support_sessions').then(d => setSessions(d.sessions));
+            useEffect(load, []);
+
+            return (
+                <div>
+                    <div class="flex justify-between items-center mb-6">
+                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">Support Interventions</p>
+                        {user.role !== 'hod' && <button onClick={() => setShowAdd(true)} class="bg-black text-white px-3 py-1 rounded text-xs font-bold">+ Schedule Session</button>}
+                    </div>
+                    {showAdd && <SessionForm onCancel={() => setShowAdd(false)} onSuccess={() => { load(); setShowAdd(false); }} />}
+                    <div class="space-y-4">
+                        {sessions.map(s => <SessionCard key={s.id} session={s} user={user} onUpdate={load} />)}
+                        {sessions.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded text-gray-400">No sessions scheduled.</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        function SessionCard({ session: s, user, onUpdate }) {
+            const [showComp, setShowComp] = useState(false);
+            const [gaps, setGaps] = useState('');
+            const [postLog, setPostLog] = useState('');
+            const complete = () => api.updateSession(s.id, { status: 'completed', detected_gaps: gaps, post_session_log: postLog }).then(onUpdate);
+
+            return (
+                <div class={`p-5 rounded-xl border bg-white shadow-sm transition-all ${s.status === 'completed' ? 'opacity-70' : ''}`}>
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class={`text-[9px] font-black uppercase px-2 py-0.5 rounded mr-2 ${s.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>{s.status}</span>
+                            <h4 class="inline-block font-bold text-base">{s.student_name}</h4>
+                            <p class="text-xs text-gray-500">{s.subject} • Assessment: {s.assessment_date ? new Date(s.assessment_date).toLocaleDateString() : 'None'}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xs font-bold">Session: {new Date(s.session_date).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+                    {s.confusion_topics && <div class="bg-gray-50 border p-3 rounded-lg text-xs text-gray-600 mb-3 italic">"Focus: {s.confusion_topics}"</div>}
+
+                    {s.post_session_log && (
+                        <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                            <label class="block text-[9px] font-black uppercase text-blue-400 mb-1">Post-Session Log</label>
+                            <p class="text-xs text-blue-800 leading-relaxed font-medium">{s.post_session_log}</p>
+                        </div>
+                    )}
+
+                    {s.detected_gaps && <div class="mt-2 border-t pt-2 text-xs text-red-600 font-medium font-black">⚠️ DETECTED GAPS: {s.detected_gaps}</div>}
+
+                    {user.role === 'tutor' && s.status === 'scheduled' && !showComp && (
+                        <button onClick={() => setShowComp(true)} class="mt-4 bg-green-600 text-white px-4 py-2 rounded text-xs font-bold">MARK COMPLETED</button>
+                    )}
+
+                    {showComp && (
+                        <div class="mt-4 border-t pt-4 space-y-4">
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Post-Session Log (Mandatory)</label>
+                                <textarea
+                                    placeholder="Explain why the gap exists (e.g. unclear worksheet, missing marking key)..."
+                                    class="w-full border p-3 rounded-lg text-xs ring-1 ring-gray-100 focus:ring-blue-500 outline-none"
+                                    rows="3"
+                                    onChange={e => setPostLog(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-gray-400 uppercase mb-2">Primary Gaps (Optional)</label>
+                                <textarea
+                                    placeholder="Quick keywords for remediation..."
+                                    class="w-full border p-3 rounded-lg text-xs ring-1 ring-gray-100"
+                                    rows="2"
+                                    onChange={e => setGaps(e.target.value)}
+                                />
+                            </div>
+                            <div class="flex gap-2">
+                                <button
+                                    onClick={complete}
+                                    disabled={!postLog.trim()}
+                                    class={`px-4 py-2 rounded text-xs font-bold transition-all ${postLog.trim() ? 'bg-black text-white hover:bg-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                >
+                                    SAVE & COMPLETE
+                                </button>
+                                <button onClick={() => setShowComp(false)} class="text-xs underline text-gray-500">Cancel</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function SessionForm({ onCancel, onSuccess }) {
+            const [f, setF] = useState({ subject: '', assessment_date: '', session_date: '', confusion_topics: '' });
+            const submit = (e) => { e.preventDefault(); api.request('/support_sessions', { method: 'POST', body: JSON.stringify(f) }).then(onSuccess).catch(e => alert(e.message)); };
+            return (
+                <form onSubmit={submit} class="bg-white border p-6 rounded-xl mb-8 shadow-md space-y-4">
+                    <h3 class="font-black italic text-gray-800">New Support Session</h3>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase">Course/Subject</label>
+                        <input class="w-full border p-2 rounded text-sm mt-1" placeholder="e.g. Biology" onChange={e => setF({ ...f, subject: e.target.value })} required />
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Session Date</label>
+                            <input type="date" class="w-full border p-2 rounded text-sm mt-1" onChange={e => setF({ ...f, session_date: e.target.value })} required />
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase">Target Assessment Date</label>
+                            <input type="date" class="w-full border p-2 rounded text-sm mt-1" onChange={e => setF({ ...f, assessment_date: e.target.value })} />
+                        </div>
+                    </div>
+                    <textarea placeholder="Specific topics of confusion..." class="w-full border p-2 rounded text-sm" onChange={e => setF({ ...f, confusion_topics: e.target.value })} />
+                    <div class="flex gap-2">
+                        <button class="bg-blue-600 text-white px-6 py-2 rounded text-sm font-bold">SCHEDULE</button>
+                        <button type="button" onClick={onCancel} class="text-gray-500 text-sm py-2">Cancel</button>
+                    </div>
+                </form>
+            );
+        }
+
+        // ── Study Hub Inventory Component (Week 4) ──────────────────────────────────
+        function SubjectHub({ user }) {
+            const [inventory, setInventory] = useState([]);
+            const [filter, setFilter] = useState('all');
+            const load = () => api.getHubInventory().then(d => setInventory(d.inventory));
+            useEffect(load, []);
+
+            const predefinedSubjects = ['Biology', 'Chemistry', 'Math', 'Physics'];
+            const filteredInventory = inventory.filter(a => filter === 'all' || a.subject.toLowerCase() === filter.toLowerCase());
+            const groupedInventory = filteredInventory.reduce((acc, curr) => {
+                const subject = curr.subject;
+                if (!acc[subject]) acc[subject] = [];
+                acc[subject].push(curr);
+                return acc;
+            }, {});
+
+            return (
+                <div class="space-y-6">
+                    <div class="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <p class="text-xs font-black uppercase text-gray-400 tracking-widest">Master Asset Library</p>
+                        <select onChange={e => setFilter(e.target.value)} class="text-xs border rounded p-1 bg-gray-100 font-bold">
+                            <option value="all">ALL SUBJECTS</option>
+                            {predefinedSubjects.map(s => <option key={s} value={s.toLowerCase()}>{s.toUpperCase()}</option>)}
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {Object.keys(groupedInventory).sort().map(subject => (
+                            <div key={subject} class="p-5 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                                <h3 class="text-lg font-black uppercase tracking-tight mb-4 border-b pb-2">{subject}</h3>
+                                <div class="space-y-3">
+                                    {groupedInventory[subject].map(a => (
+                                        <div key={a.id} class="flex justify-between items-start pt-3 border-t border-gray-50 first:border-0 first:pt-0">
+                                            <div>
+                                                <span class={`text-[8px] font-black uppercase px-2 py-0.5 rounded tracking-tighter ${a.asset_type === 'worksheet' ? 'bg-blue-50 text-blue-600' : a.asset_type === 'slides' ? 'bg-orange-50 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {a.asset_type.replace('_', ' ')}
+                                                </span>
+                                                <h4 class="font-bold text-sm mt-1">{a.topic}</h4>
+                                                <p class="text-[10px] text-gray-400 font-bold mt-1">By {a.tutor_name} • {new Date(a.published_at).toLocaleDateString()}</p>
+                                            </div>
+                                            <a href={a.drive_link} target="_blank" class="bg-gray-50 p-2 rounded-full hover:bg-gray-100 shrink-0 ml-2">
+                                                <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                            </a>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                        {Object.keys(groupedInventory).length === 0 && <div class="col-span-2 py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">Hub library is currently empty. Assets appear here once published.</div>}
+                    </div>
+                </div>
+            );
+        }
+
+        function AssessmentWeekView({ user }) {
+            const [assessments, setAssessments] = useState([]);
+            const [campaigns, setCampaigns] = useState([]);
+
+            useEffect(() => {
+                api.getAssessments().then(d => setAssessments(d.assessments));
+                api.getCampaigns().then(d => setCampaigns(d.campaigns));
+            }, []);
+
+            // Group by Week (extracted from date)
+            const getWeek = (dateStr) => {
+                const d = new Date(dateStr);
+                const oneJan = new Date(d.getFullYear(), 0, 1);
+                const numberOfDays = Math.floor((d - oneJan) / (24 * 60 * 60 * 1000));
+                return Math.ceil((d.getDay() + 1 + numberOfDays) / 7);
+            };
+
+            const weeks = Array.from(new Set(assessments.map(a => getWeek(a.date)))).sort((a, b) => a - b);
+
+            return (
+                <div class="space-y-6">
+                    <h2 class="font-black text-xl italic uppercase tracking-tighter">Academic Strategic View</h2>
+                    {weeks.map(week => (
+                        <div key={week} class="border rounded-xl p-6 bg-white shadow-sm overflow-hidden relative">
+                            <div class="absolute top-0 right-0 p-4 bg-gray-50 border-b border-l text-xs font-black uppercase text-gray-400">Week {week}</div>
+                            <h3 class="font-bold text-lg mb-4 text-gray-800">Critical Milestones</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-red-500 mb-3 tracking-widest">Upcoming Assessments</p>
+                                    <div class="space-y-2">
+                                        {assessments.filter(a => getWeek(a.date) === week).map(a => (
+                                            <div key={a.id} class="flex justify-between items-center p-3 rounded bg-red-50 border border-red-100">
+                                                <span class="text-xs font-bold text-red-900">{a.subject} — {a.type}</span>
+                                                <span class="text-[10px] text-red-500 font-medium">{new Date(a.date).toLocaleDateString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <p class="text-[10px] font-black uppercase text-blue-500 mb-3 tracking-widest">Aligned Campaigns</p>
+                                    <div class="space-y-2">
+                                        {campaigns.filter(c => c.status === 'approved' && getWeek(c.target_date) === week).map(c => (
+                                            <div key={c.id} class="flex justify-between items-center p-3 rounded bg-blue-50 border border-blue-100">
+                                                <span class="text-xs font-bold text-blue-900">{c.topic}</span>
+                                                <span class="text-[10px] text-blue-500 font-medium">{c.tutor_name}</span>
+                                            </div>
+                                        ))}
+                                        {campaigns.filter(c => c.status === 'approved' && getWeek(c.target_date) === week).length === 0 && (
+                                            <p class="text-xs text-gray-400 italic py-4">No approved campaigns targeting this week.</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {weeks.length === 0 && <div class="py-20 text-center border-2 border-dashed rounded-2xl text-gray-400 italic">No assessments mapped. Add assessments to see the strategic view.</div>}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+
+</html>

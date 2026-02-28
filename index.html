@@ -1105,6 +1105,8 @@
 
         window.setTab = (tabId) => {
             state.currentTab = tabId;
+            window.showNewCampaignForm = false;
+            window.showNewAssetForm = false;
             renderApp();
             // Load data for the new tab
             loadTabData(tabId);
@@ -1494,7 +1496,8 @@
         // ── Campaigns View (Week 1 & 6) ──────────────────────────────────────────
         async function renderCampaignView(viewMode) {
             if (!state.campaigns) {
-                const d = await api.getCampaigns({ mode: viewMode });
+                const params = viewMode === 'approvals' ? { status: 'pending_approval' } : {};
+                const d = await api.getCampaigns(params);
                 state.campaigns = d.campaigns || [];
             }
             const { campaigns } = state;
@@ -1511,7 +1514,7 @@
                         ` : ''}
                     </div>
 
-                    ${window.showNewCampaignForm ? renderCampaignForm() : ''}
+                    ${window.showNewCampaignForm && viewMode === 'own' ? renderCampaignForm() : ''}
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         ${campaigns.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No campaigns found.</div>' : ''}
@@ -1628,14 +1631,11 @@
         // ── Asset View (Week 2 & 7) ──────────────────────────────────────────
         async function renderAssetView() {
             if (!state.assets) {
-                const params = {};
-                if (isHODOrAdmin(state.user) && state.assetViewMode === 'oversight') {
-                    params.mode = 'oversight';
-                }
-                const d = await api.getAssets(params);
+                const d = await api.getAssets();
                 state.assets = d.assets || [];
             }
             const { assets, user } = state;
+            const displayAssets = isHODOrAdmin(user) && state.assetViewMode !== 'oversight' ? assets.filter(a => a.tutor_id === user.id) : assets;
 
             return `
                 <div class="space-y-6">
@@ -1657,8 +1657,8 @@
                     ${window.showNewAssetForm ? renderAssetForm() : ''}
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        ${assets.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No assets found.</div>' : ''}
-                        ${assets.map(a => `
+                        ${displayAssets.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No assets found.</div>' : ''}
+                        ${displayAssets.map(a => `
                             <div class="p-6 bg-white border rounded-xl shadow-sm space-y-3 relative overflow-hidden">
                                 <div class="absolute top-0 right-0 p-3 bg-gray-50 border-b border-l text-[8px] font-black uppercase text-gray-400">${a.asset_type}</div>
                                 <div>
@@ -1670,12 +1670,7 @@
                                     <span class="text-[10px] uppercase font-black px-2 py-0.5 border rounded-full ${a.status === 'published' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-gray-50 text-gray-400'}">${a.status}</span>
                                     <a href="${a.drive_link}" target="_blank" class="text-[10px] font-black text-blue-600 hover:underline">Link ↗</a>
                                 </div>
-                                ${isHODOrAdmin(user) && a.status === 'pending_hod' ? `
-                                    <div class="pt-3 border-t flex gap-2">
-                                        <button onclick="handleAssetAction(${a.id}, 'approved')" class="flex-1 bg-green-600 text-white py-1 rounded text-[8px] font-black uppercase">Approve</button>
-                                        <button onclick="handleAssetAction(${a.id}, 'rejected')" class="flex-1 bg-red-600 text-white py-1 rounded text-[8px] font-black uppercase">Reject</button>
-                                    </div>
-                                ` : ''}
+                                ${a.hod_feedback ? `<div class="mt-3 p-3 rounded text-xs font-medium ${a.status === 'rejected' ? 'bg-red-100 border border-red-200 text-red-700' : 'bg-gray-50 border text-gray-600'}">HOD FEEDBACK: ${a.hod_feedback}</div>` : ''}
                             </div>
                         `).join('')}
                     </div>
@@ -1690,9 +1685,12 @@
         };
 
         window.handleAssetAction = async (id, status) => {
+            const feedback = status === 'rejected' ? prompt('Feedback for tutor (required):') : '';
+            if (status === 'rejected' && !feedback) return;
             try {
-                await api.updateAsset(id, { status });
+                await api.updateAsset(id, status, feedback);
                 state.assets = null;
+                state.allAssets = null;
                 renderApp();
             } catch (e) { alert(e.message); }
         };
@@ -1863,10 +1861,10 @@
                                     <div class="space-y-1">
                                         <label class="text-[10px] font-bold text-gray-400 uppercase">Assessment Type</label>
                                         <select name="type" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none">
-                                            <option value="Exam">Exam</option>
-                                            <option value="Test">Test</option>
-                                            <option value="Quiz">Quiz</option>
-                                            <option value="Mock">Mock</option>
+                                            <option value="exam">Exam</option>
+                                            <option value="test">Test</option>
+                                            <option value="quiz">Quiz</option>
+                                            <option value="mock">Mock</option>
                                         </select>
                                     </div>
                                 </div>
@@ -1876,14 +1874,11 @@
                                         <input type="date" name="date" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" />
                                     </div>
                                     <div class="space-y-1">
-                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Institution</label>
-                                        <input type="text" name="institution" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. IEB, CAPS" />
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Campaign Window (Preview Topics)</label>
+                                        <input type="text" name="campaign_window" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. Calculus Basics, Trigonometry" />
                                     </div>
                                 </div>
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Campaign Window (Preview Topics)</label>
-                                    <input type="text" name="campaign_window" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none" placeholder="e.g. Calculus Basics, Trigonometry" />
-                                </div>
+                                <input type="hidden" name="institution" value="TSH" />
                                 <div class="flex gap-3 pt-2">
                                     <button type="submit" id="submit-assessment-btn" class="flex-1 bg-black text-white p-3 rounded-lg font-bold text-sm hover:bg-gray-800">Save Assessment</button>
                                     <button type="button" onclick="window.showNewAssessmentForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500">Cancel</button>
@@ -1962,6 +1957,7 @@
                         <div class="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-2xl shadow-sm">
                             <h3 class="font-black text-sm uppercase mb-4 text-blue-900">New Support Session Log</h3>
                             <form onsubmit="handleCreateSession(event)" class="space-y-4">
+                                <input type="hidden" name="student_name" value="Group Segment" />
                                 <div class="space-y-1">
                                     <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
                                     <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -1980,7 +1976,7 @@
 
                                 <div class="space-y-1 relative">
                                     <label class="text-[10px] font-bold text-gray-400 uppercase">Teaching Progress/Outcomes</label>
-                                    <textarea name="summary" required maxlength="1000" rows="3" 
+                                    <textarea name="confusion_topics" required maxlength="1000" rows="3" 
                                         oninput="document.getElementById('session-desc-count').innerText = this.value.length + '/1000'"
                                         class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
                                     <span id="session-desc-count" class="absolute right-2 bottom-2 text-[8px] text-gray-400 font-bold uppercase">0/1000</span>
@@ -2162,10 +2158,11 @@
                                         <td class="px-6 py-4 font-black text-gray-400 text-xs">#${l.order_index || 0}</td>
                                         <td class="px-6 py-4">
                                             <div class="font-bold flex items-center gap-2">
-                                                ${l.title}
+                                                ${l.link_text}
                                                 ${l.is_hidden ? '<span class="text-[8px] bg-red-50 text-red-500 px-1 rounded uppercase">Hidden</span>' : ''}
                                             </div>
-                                            <div class="text-[10px] text-gray-400 truncate max-w-xs">${l.url}</div>
+                                            <div class="text-[10px] text-gray-400 truncate max-w-xs">${l.sop_url}</div>
+                                            ${l.description ? `<div class="text-[10px] text-gray-500 mt-1 italic">${l.description}</div>` : ''}
                                         </td>
                                         <td class="px-6 py-4">
                                             <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded ${l.target_role === 'tutor' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}">
@@ -2185,6 +2182,45 @@
                         </table>
                     </div>
                 </div>
+
+                ${window.showSopModal ? `
+                    <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl relative overflow-hidden">
+                            <h3 class="font-black text-lg italic uppercase tracking-tighter mb-4">${state.editingSopId ? 'Edit SOP Link' : 'New SOP Link'}</h3>
+                            <form onsubmit="handleSaveSop(event)" class="space-y-4">
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Link Text / Title</label>
+                                    <input type="text" name="link_text" id="sop-link-text" required class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">URL / Drive Link</label>
+                                    <input type="url" name="sop_url" id="sop-url" required class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Short Description (Optional)</label>
+                                    <textarea name="description" id="sop-desc" class="w-full p-2 border rounded text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none" rows="2"></textarea>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Target Role</label>
+                                        <select name="target_role" id="sop-role" class="w-full p-2 border rounded text-sm bg-gray-50">
+                                            <option value="tutor">Tutors</option>
+                                            <option value="hod">HODs</option>
+                                        </select>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Order Index</label>
+                                        <input type="number" name="order_index" id="sop-order" value="0" required class="w-full p-2 border rounded text-sm bg-gray-50" />
+                                    </div>
+                                </div>
+                                <div class="flex gap-2 pt-4">
+                                    <button type="submit" id="save-sop-btn" class="flex-1 bg-black text-white p-3 rounded font-black text-xs uppercase hover:bg-gray-800 transition-colors">Save Link</button>
+                                    <button type="button" onclick="window.showSopModal = false; state.editingSopId = null; renderApp();" class="px-6 border p-3 rounded font-black text-xs text-gray-500 uppercase hover:bg-gray-50 transition-colors">Cancel</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                ` : ''}
             `;
         }
 
@@ -2193,8 +2229,78 @@
             renderApp();
         };
 
+        window.openSopModal = () => {
+            window.showSopModal = true;
+            state.editingSopId = null;
+            renderApp();
+            // Clear form after render
+            setTimeout(() => {
+                document.getElementById('sop-link-text').value = '';
+                document.getElementById('sop-url').value = '';
+                document.getElementById('sop-desc').value = '';
+                document.getElementById('sop-role').value = 'tutor';
+                document.getElementById('sop-order').value = '0';
+            }, 0);
+        };
+
         window.handleSopAction = async (action, id) => {
-            alert('SOP CRUD Operation: ' + action + ' for ID ' + id + '. (API call logic would go here)');
+            if (action === 'delete') {
+                if (!confirm('Are you sure you want to delete this SOP link?')) return;
+                try {
+                    await api.deleteSopLink(id);
+                    state.allSops = null;
+                    renderApp();
+                } catch (e) { alert(e.message); }
+            } else if (action === 'toggle-visibility') {
+                const sop = state.allSops.find(s => s.id === id);
+                if (!sop) return;
+                try {
+                    await api.updateSopLink(id, { is_hidden: !sop.is_hidden });
+                    state.allSops = null;
+                    renderApp();
+                } catch (e) { alert(e.message); }
+            } else if (action === 'edit') {
+                const sop = state.allSops.find(s => s.id === id);
+                if (!sop) return;
+
+                window.showSopModal = true;
+                state.editingSopId = id;
+                renderApp();
+
+                // Populate form after render
+                setTimeout(() => {
+                    document.getElementById('sop-link-text').value = sop.link_text || '';
+                    document.getElementById('sop-url').value = sop.sop_url || '';
+                    document.getElementById('sop-desc').value = sop.description || '';
+                    document.getElementById('sop-role').value = sop.target_role || 'tutor';
+                    document.getElementById('sop-order').value = sop.order_index || 0;
+                }, 0);
+            }
+        };
+
+        window.handleSaveSop = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('save-sop-btn');
+            if (btn) { btn.disabled = true; btn.innerText = 'Saving...'; }
+
+            const fd = new FormData(e.target);
+            const data = Object.fromEntries(fd);
+            data.order_index = parseInt(data.order_index) || 0;
+
+            try {
+                if (state.editingSopId) {
+                    await api.updateSopLink(state.editingSopId, data);
+                } else {
+                    await api.createSopLink(data);
+                }
+                window.showSopModal = false;
+                state.editingSopId = null;
+                state.allSops = null;
+                renderApp();
+            } catch (err) {
+                alert(err.message);
+                if (btn) { btn.disabled = false; btn.innerText = 'Save Link'; }
+            }
         };
 
         // ── Inbox View ───────────────────────────────────────────────
@@ -2264,8 +2370,11 @@
                                     <span class="text-[10px] font-black uppercase px-2 py-1 border rounded shadow-sm">${a.status}</span>
                                 </div>
                                 <a href="${a.drive_link}" target="_blank" class="text-xs text-blue-600 underline mt-2 block font-black">Open Drive Link ↗</a>
-                                ${a.status === 'approved' || a.status === 'pending' ? `
-                                    <button onclick="handlePublishAsset(${a.id})" class="mt-4 bg-green-600 text-white px-4 py-2 rounded text-xs font-bold uppercase hover:bg-green-700 transition-colors">Publish to Hub</button>
+                                ${a.status === 'approved' || a.status === 'pending_cm' || a.status === 'pending' ? `
+                                    <div class="mt-4 flex gap-2">
+                                        <button onclick="handlePublishAsset(${a.id})" class="flex-1 bg-green-600 text-white px-4 py-2 rounded text-[10px] font-black uppercase hover:bg-green-700 transition-colors">🚀 Publish</button>
+                                        ${a.asset_category === 'hub_asset' && a.status === 'pending_cm' ? `<button onclick="handleAssetAction(${a.id}, 'rejected')" class="flex-1 bg-red-600 text-white px-4 py-2 rounded text-[10px] font-black uppercase hover:bg-red-700 transition-colors">❌ Reject</button>` : ''}
+                                    </div>
                                 ` : ''}
                             </div>
                         `).join('')}
@@ -2316,7 +2425,7 @@
         }
 
         // ── Strategic View ────────────────────────────────────────────────────
-        async function renderAssessmentWeekView() {
+        async function renderAssessmentMonthView() {
             if (!state.allAssessments || !state.allCampaigns) {
                 const [ad, cd] = await Promise.all([
                     api.getAssessments(),
@@ -2327,47 +2436,55 @@
             }
             const { allAssessments: assessments, allCampaigns: campaigns } = state;
 
-            const getWeek = (dateStr) => {
+            const getMonthKey = (dateStr) => {
+                if (!dateStr) return '0000-00';
                 const d = new Date(dateStr);
-                const firstDayOfYear = new Date(d.getFullYear(), 0, 1);
-                const pastDaysOfYear = (d - firstDayOfYear) / 86400000;
-                return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             };
 
-            const weeksSet = new Set();
-            assessments.forEach(a => weeksSet.add(getWeek(a.assessment_date)));
-            campaigns.forEach(c => weeksSet.add(getWeek(c.target_date)));
-            const weeks = Array.from(weeksSet).sort((a, b) => a - b);
+            const formatMonth = (key) => {
+                if (key === '0000-00') return 'TBD';
+                const [y, m] = key.split('-');
+                const d = new Date(y, parseInt(m) - 1, 1);
+                return d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+            };
+
+            const monthsSet = new Set();
+            assessments.forEach(a => monthsSet.add(getMonthKey(a.date)));
+            campaigns.forEach(c => monthsSet.add(getMonthKey(c.target_date)));
+            const months = Array.from(monthsSet).filter(m => m !== '0000-00').sort();
 
             return `
                 <div class="space-y-6">
                     <h2 class="font-black text-xl italic uppercase tracking-tighter">Academic Strategic View</h2>
-                    ${weeks.length === 0 ? '<div class="py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">Strategic calendar is clear.</div>' : ''}
-                    ${weeks.map(week => `
+                    ${months.length === 0 ? '<div class="py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">Strategic calendar is clear.</div>' : ''}
+                    ${months.map(month => `
                         <div class="border rounded-xl p-6 bg-white shadow-sm relative overflow-hidden">
-                            <div class="absolute top-0 right-0 p-4 bg-gray-50 border-b border-l text-xs font-black uppercase text-gray-400">Week ${week}</div>
+                            <div class="absolute top-0 right-0 p-4 bg-gray-50 border-b border-l text-xs font-black uppercase text-gray-400">${formatMonth(month)}</div>
                             <h3 class="font-bold text-lg mb-4 text-gray-800 italic">Critical Milestones</h3>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <p class="text-[10px] font-black uppercase text-red-500 mb-3 tracking-widest">Assessments</p>
                                     <div class="space-y-2">
-                                        ${assessments.filter(a => getWeek(a.assessment_date) === week).map(a => `
+                                        ${assessments.filter(a => getMonthKey(a.date) === month).map(a => `
                                             <div class="flex justify-between items-center p-3 rounded bg-red-50 border border-red-100">
                                                 <span class="text-xs font-bold text-red-900">${a.subject}</span>
-                                                <span class="text-[10px] text-red-500 font-black">${new Date(a.assessment_date).toLocaleDateString()}</span>
+                                                <span class="text-[10px] text-red-500 font-black">${new Date(a.date).toLocaleDateString()}</span>
                                             </div>
                                         `).join('')}
+                                        ${assessments.filter(a => getMonthKey(a.date) === month).length === 0 ? '<p class="text-[10px] text-gray-400 italic">No assessments scheduled</p>' : ''}
                                     </div>
                                 </div>
                                 <div>
                                     <p class="text-[10px] font-black uppercase text-blue-500 mb-3 tracking-widest">Campaigns</p>
                                     <div class="space-y-2">
-                                        ${campaigns.filter(c => getWeek(c.target_date) === week).map(c => `
+                                        ${campaigns.filter(c => getMonthKey(c.target_date) === month).map(c => `
                                             <div class="flex justify-between items-center p-3 rounded bg-blue-50 border border-blue-100">
                                                 <span class="text-xs font-bold text-blue-900">${c.topic}</span>
                                                 <span class="text-[10px] text-blue-500 font-black">${new Date(c.target_date).toLocaleDateString()}</span>
                                             </div>
                                         `).join('')}
+                                        ${campaigns.filter(c => getMonthKey(c.target_date) === month).length === 0 ? '<p class="text-[10px] text-gray-400 italic">No campaigns scheduled</p>' : ''}
                                     </div>
                                 </div>
                             </div>

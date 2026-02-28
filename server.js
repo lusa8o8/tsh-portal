@@ -638,12 +638,12 @@ app.get('/api/assets', authenticateToken, async (req, res) => {
     }
 });
 
-// PATCH /api/assets/:id - HOD approves or rejects (hub_asset only)
-app.patch('/api/assets/:id', authenticateToken, requireRole('hod', 'admin'), async (req, res) => {
+// PATCH /api/assets/:id - Content Manager approves or rejects (hub_asset only)
+app.patch('/api/assets/:id', authenticateToken, requireRole('content_manager', 'admin'), async (req, res) => {
     const client = await pool.connect();
     try {
         const { id } = req.params;
-        const { status, hod_feedback } = req.body;
+        const { status, hod_feedback } = req.body; // Keeping variable name for compat
         if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
         if (status === 'rejected' && !hod_feedback) return res.status(400).json({ error: 'Feedback required when rejecting' });
 
@@ -651,8 +651,8 @@ app.patch('/api/assets/:id', authenticateToken, requireRole('hod', 'admin'), asy
 
         const updateQuery = status === 'approved'
             ? `UPDATE hub_assets SET status = 'approved', hod_approved_at = NOW(), hod_feedback = $2,
-               content_manager_alerted_at = NOW() WHERE id = $1 AND status = 'pending_hod' AND asset_category = 'hub_asset' RETURNING *`
-            : `UPDATE hub_assets SET status = 'rejected', hod_feedback = $2 WHERE id = $1 AND status = 'pending_hod' AND asset_category = 'hub_asset' RETURNING *`;
+               content_manager_alerted_at = NOW() WHERE id = $1 AND status = 'pending_cm' AND asset_category = 'hub_asset' RETURNING *`
+            : `UPDATE hub_assets SET status = 'rejected', hod_feedback = $2 WHERE id = $1 AND status = 'pending_cm' AND asset_category = 'hub_asset' RETURNING *`;
 
         const result = await client.query(updateQuery, [id, hod_feedback || null]);
         if (result.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Asset not found or not pending' }); }
@@ -662,12 +662,12 @@ app.patch('/api/assets/:id', authenticateToken, requireRole('hod', 'admin'), asy
         if (status === 'approved') {
             await client.query(
                 `INSERT INTO notifications (asset_id, message, recipient_role) VALUES ($1, $2, 'content_manager')`,
-                [asset.id, `[Hub Resource] HOD approved: "${asset.topic}" (${asset.asset_type}) — ready to publish to Study Hub`]
+                [asset.id, `[Hub Resource] Content Manager approved: "${asset.topic}" (${asset.asset_type}) — ready to publish to Study Hub`]
             );
         } else {
             await client.query(
                 `INSERT INTO notifications (asset_id, message, recipient_role) VALUES ($1, $2, 'tutor')`,
-                [asset.id, `[Hub Resource] HOD returned your submission: "${asset.topic}". Reason: ${hod_feedback || 'No reason given'}`]
+                [asset.id, `[Hub Resource] Content Manager returned your submission: "${asset.topic}". Reason: ${hod_feedback || 'No reason given'}`]
             );
         }
 
