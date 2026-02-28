@@ -843,6 +843,17 @@
             return user.role === 'hod' || user.role === 'admin';
         }
 
+        // Helper function for SOP icons
+        function getSopIcon(title) {
+            const t = (title || '').toLowerCase();
+            if (t.includes('campaign')) return '📢';
+            if (t.includes('asset') || t.includes('content')) return '📤';
+            if (t.includes('assessment')) return '🗺️';
+            if (t.includes('support') || t.includes('session')) return '🤝';
+            if (t.includes('register') || t.includes('user')) return '👤';
+            return '📁';
+        }
+
         // --- Core Rendering Engine ---
         async function renderApp() {
             const root = document.getElementById('root');
@@ -875,6 +886,8 @@
                 renderApp();
             } catch (e) {
                 console.error('Failed to load dashboard data:', e);
+                state.dashboardData = {}; // Prevent infinite loading
+                renderApp();
             }
         }
 
@@ -1330,10 +1343,10 @@
                         <h2 class="text-lg font-bold mb-4">Quick SOP Access</h2>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             ${sopLinks.map(link => `
-                                <a href="${link.url}" target="_blank" class="sop-card p-4 bg-white border rounded-lg hover:border-blue-400 transition-colors flex items-center">
-                                    <span class="text-2xl mr-4">${getSopIcon(link.title)}</span>
+                                <a href="${link.sop_url}" target="_blank" class="sop-card p-4 bg-white border rounded-lg hover:border-blue-400 transition-colors flex items-center">
+                                    <span class="text-2xl mr-4">${getSopIcon(link.link_text)}</span>
                                     <div>
-                                        <div class="font-bold text-sm">${link.title}</div>
+                                        <div class="font-bold text-sm">${link.link_text}</div>
                                         <div class="text-[10px] text-gray-400 font-mono">${link.sop_code || 'SOP'}</div>
                                     </div>
                                 </a>
@@ -1509,9 +1522,15 @@
                                     <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
                                     <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
                                 </div>
-                                <div class="space-y-1">
-                                    <label class="text-[10px] font-bold text-gray-400 uppercase">Target Date</label>
-                                    <input type="date" name="target_date" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Target Date</label>
+                                        <input type="date" name="target_date" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Target Time</label>
+                                        <input type="time" name="target_time" class="w-full p-2.5 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" />
+                                    </div>
                                 </div>
                             </div>
                             
@@ -1770,7 +1789,7 @@
             }
         };
 
-        // ── Assessment Map (Week 3) ─────────────────────────────────────────────
+        // ── Assessment Map (Week 3 & 7) ─────────────────────────────────────────────
         async function renderAssessmentMap() {
             if (!state.assessments) {
                 const d = await api.getAssessments();
@@ -1781,35 +1800,69 @@
             return `
                     <div class="space-y-6">
                         <div class="flex justify-between items-center">
-                            <h2 class="font-black text-xl italic uppercase tracking-tighter">Academic Assessment Map</h2>
+                            <h2 class="font-black text-xl italic uppercase tracking-tighter">Strategic Assessment Map</h2>
                             <button onclick="window.showNewAssessmentForm = true; renderApp();" class="bg-red-600 text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-red-700 transition-colors">
                                 + Add Assessment
                             </button>
                         </div>
 
                         ${window.showNewAssessmentForm ? `
-                            <div class="mb-8 p-6 bg-red-50 border border-red-100 rounded-2xl">
-                                <h3 class="font-black text-sm uppercase mb-4 text-red-900">Log Upcoming Assessment</h3>
+                            <div class="mb-8 p-6 bg-red-50 border border-red-100 rounded-2xl shadow-sm">
+                                <h3 class="font-black text-sm uppercase mb-4 text-red-900">Log Upcoming Assessment Milestone</h3>
                                 <form onsubmit="handleCreateAssessment(event)" class="space-y-4">
                                     <div class="grid grid-cols-2 gap-4">
-                                        <input type="text" name="subject" placeholder="Subject" required class="p-3 border rounded-lg text-sm bg-white" />
-                                        <input type="date" name="date" required class="p-3 border rounded-lg text-sm bg-white" />
+                                        <div class="space-y-1">
+                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
+                                            <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Institution</label>
+                                            <input type="text" name="institution" placeholder="e.g. Cambridge, CAPS" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
+                                        </div>
                                     </div>
-                                    <input type="text" name="type" placeholder="Type (e.g. Midterm, Quiz)" required class="w-full p-3 border rounded-lg text-sm bg-white" />
-                                    <div class="flex gap-2">
-                                        <button type="submit" class="flex-1 bg-red-600 text-white p-3 rounded-lg font-bold text-sm">Pin to Map</button>
-                                        <button type="button" onclick="window.showNewAssessmentForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-400">Cancel</button>
+                                    
+                                    <div class="grid grid-cols-3 gap-4">
+                                        <div class="space-y-1">
+                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Type</label>
+                                            <select name="type" required class="w-full p-2.5 border rounded-lg text-sm bg-white">
+                                                <option value="exam">Exam</option>
+                                                <option value="test">Test</option>
+                                                <option value="quiz">Quiz</option>
+                                                <option value="mock">Mock</option>
+                                                <option value="topic">Topic Test</option>
+                                            </select>
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Assessment Date</label>
+                                            <input type="date" name="date" required class="w-full p-2.5 border rounded-lg text-sm bg-white" />
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Prep Window</label>
+                                            <input type="text" name="campaign_window" placeholder="e.g. 2 weeks" class="w-full p-2.5 border rounded-lg text-sm bg-white" />
+                                        </div>
+                                    </div>
+
+                                    <div class="flex gap-3 pt-2">
+                                        <button type="submit" class="flex-1 bg-red-600 text-white p-3 rounded-lg font-bold text-sm hover:bg-red-700 transition-colors shadow-sm">Pin to Map</button>
+                                        <button type="button" onclick="window.showNewAssessmentForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
                                     </div>
                                 </form>
                             </div>
                         ` : ''}
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            ${assessments.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No assessments found.</div>' : ''}
                             ${assessments.map(a => `
-                                <div class="p-4 bg-white border rounded-xl shadow-sm text-center">
-                                    <div class="text-[10px] font-black uppercase text-red-500 mb-1">${a.type}</div>
-                                    <h4 class="font-bold">${a.subject}</h4>
-                                    <div class="mt-2 py-2 px-3 bg-red-50 rounded text-xs font-black text-red-900">${new Date(a.date).toLocaleDateString()}</div>
+                                <div class="p-6 bg-white border rounded-xl shadow-sm space-y-3">
+                                    <div class="flex justify-between items-start">
+                                        <span class="text-[8px] font-black px-2 py-0.5 rounded bg-red-50 text-red-600 uppercase tracking-widest">${a.type}</span>
+                                        <span class="text-[8px] font-bold text-gray-400 uppercase">${a.institution}</span>
+                                    </div>
+                                    <h4 class="font-bold text-lg">${a.subject}</h4>
+                                    <div class="flex items-center gap-2 text-xs font-black text-red-900 bg-red-50 p-2 rounded-lg">
+                                        <span>📅</span> ${new Date(a.date).toLocaleDateString()}
+                                    </div>
+                                    ${a.campaign_window ? `<p class="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Window: ${a.campaign_window}</p>` : ''}
                                 </div>
                             `).join('')}
                         </div>
@@ -1829,7 +1882,7 @@
             } catch (e) { alert(e.message); }
         };
 
-        // ── Support Sessions (Week 3) ───────────────────────────────────────────
+        // ── Support Sessions (Week 3 & 7) ───────────────────────────────────────────
         async function renderSupportSessions() {
             if (!state.sessions) {
                 const d = await api.getSessions();
@@ -1840,39 +1893,63 @@
             return `
                     <div class="space-y-6">
                         <div class="flex justify-between items-center">
-                            <h2 class="font-black text-xl italic uppercase tracking-tighter">Support Sessions</h2>
+                            <h2 class="font-black text-xl italic uppercase tracking-tighter">Support & Gap Logs</h2>
                             <button onclick="window.showNewSessionForm = true; renderApp();" class="bg-blue-600 text-white px-4 py-2 rounded text-xs font-black uppercase hover:bg-blue-700 transition-colors">
-                                + Log Session
+                                + Log Support Session
                             </button>
                         </div>
 
                         ${window.showNewSessionForm ? `
-                            <div class="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-2xl">
-                                <h3 class="font-black text-sm uppercase mb-4 text-blue-900">New 1-on-1 Support Log</h3>
+                            <div class="mb-8 p-6 bg-blue-50 border border-blue-100 rounded-2xl shadow-sm">
+                                <h3 class="font-black text-sm uppercase mb-4 text-blue-900">New Support Session Log</h3>
                                 <form onsubmit="handleCreateSession(event)" class="space-y-4">
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <input type="text" name="subject" placeholder="Subject" required class="p-3 border rounded-lg text-sm bg-white" />
-                                        <input type="date" name="session_date" required class="p-3 border rounded-lg text-sm bg-white" />
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Subject/Course</label>
+                                        <input type="text" name="subject" placeholder="e.g. G12 Math" required class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
                                     </div>
-                                    <textarea name="confusion_topics" placeholder="Students found X challenging..." required class="w-full p-3 border rounded-lg text-sm bg-white" rows="2"></textarea>
-                                    <div class="flex gap-2">
-                                        <button type="submit" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold text-sm">Book Session</button>
-                                        <button type="button" onclick="window.showNewSessionForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-400">Cancel</button>
+                                    
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="space-y-1">
+                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Session Date</label>
+                                            <input type="date" name="session_date" required class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                        <div class="space-y-1">
+                                            <label class="text-[10px] font-bold text-gray-400 uppercase">Target Assessment Date</label>
+                                            <input type="date" name="assessment_date" class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <label class="text-[10px] font-bold text-gray-400 uppercase">Confusion Topics / Learning Gaps</label>
+                                        <textarea name="confusion_topics" placeholder="Describe what the student found challenging..." required 
+                                            class="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none h-24"></textarea>
+                                    </div>
+
+                                    <div class="flex gap-3 pt-2">
+                                        <button type="submit" class="flex-1 bg-blue-600 text-white p-3 rounded-lg font-bold text-sm hover:bg-blue-700 transition-colors shadow-sm">Save Log</button>
+                                        <button type="button" onclick="window.showNewSessionForm = false; renderApp();" class="px-6 border p-3 rounded-lg font-bold text-sm text-gray-500 hover:bg-gray-50 transition-colors">Cancel</button>
                                     </div>
                                 </form>
                             </div>
                         ` : ''}
 
-                        <div class="space-y-4">
+                        <div class="grid grid-cols-1 gap-4">
+                            ${sessions.length === 0 ? '<div class="col-span-full py-20 text-center border-2 border-dashed border-gray-100 rounded-2xl text-gray-400 text-sm italic">No support sessions logged.</div>' : ''}
                             ${sessions.map(s => `
-                                <div class="p-5 bg-white border rounded-xl shadow-sm flex justify-between items-center">
-                                    <div>
-                                        <h4 class="font-bold">${s.subject} Support</h4>
-                                        <p class="text-xs text-gray-400">${new Date(s.session_date).toLocaleDateString()} · ${s.status}</p>
-                                        <p class="text-xs mt-2 italic text-gray-600">"${s.confusion_topics}"</p>
+                                <div class="p-5 bg-white border rounded-xl shadow-sm flex justify-between items-center group hover:border-blue-200 transition-all">
+                                    <div class="space-y-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[10px] font-black uppercase text-blue-600 bg-blue-50 px-2 py-0.5 rounded">${s.subject}</span>
+                                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">${s.status}</span>
+                                        </div>
+                                        <div class="flex gap-4 text-[10px] font-bold text-gray-400 uppercase">
+                                            <span>📅 Session: ${new Date(s.session_date).toLocaleDateString()}</span>
+                                            ${s.assessment_date ? `<span class="text-red-400">🎯 Target: ${new Date(s.assessment_date).toLocaleDateString()}</span>` : ''}
+                                        </div>
+                                        <p class="text-xs mt-2 text-gray-600 border-l-2 border-blue-100 pl-3 italic">"${s.confusion_topics}"</p>
                                     </div>
                                     ${s.status === 'scheduled' ? `
-                                        <button onclick="handleCompleteSession(${s.id})" class="text-[10px] font-black bg-green-600 text-white px-4 py-2 rounded uppercase">Complete</button>
+                                        <button onclick="handleCompleteSession(${s.id})" class="text-[10px] font-black bg-green-600 text-white px-6 py-2.5 rounded-lg uppercase hover:bg-green-700 transition-colors shadow-sm">Complete</button>
                                     ` : ''}
                                 </div>
                             `).join('')}
@@ -1880,6 +1957,18 @@
                     </div>
                 `;
         }
+
+        window.handleCreateSession = async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target);
+            const data = Object.fromEntries(fd);
+            try {
+                await api.createSession(data);
+                window.showNewSessionForm = false;
+                state.sessions = null;
+                renderApp();
+            } catch (e) { alert(e.message); }
+        };
 
         window.handleCompleteSession = async (id) => {
             const log = prompt('Post-session summary/outcome:');

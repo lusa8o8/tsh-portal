@@ -349,7 +349,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.post('/api/campaigns', authenticateToken, requireRole('tutor', 'hod', 'admin'), async (req, res) => {
     try {
-        const { subject, topic, trick_pattern, outcomes, target_date } = req.body;
+        const { subject, topic, trick_pattern, outcomes, target_date, target_time } = req.body;
         if (!subject || !topic) return res.status(400).json({ error: 'Subject and topic required' });
 
         const userId = req.user.id;
@@ -367,9 +367,9 @@ app.post('/api/campaigns', authenticateToken, requireRole('tutor', 'hod', 'admin
         }
 
         const result = await pool.query(
-            `INSERT INTO campaigns (tutor_id, subject, topic, trick_pattern, outcomes, target_date, status, hod_approved_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [userId, subject, topic, trick_pattern, outcomes, target_date, initialStatus, approvedAt]
+            `INSERT INTO campaigns (tutor_id, subject, topic, trick_pattern, outcomes, target_date, target_time, status, hod_approved_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [userId, subject, topic, trick_pattern, outcomes, target_date, target_time || null, initialStatus, approvedAt]
         );
         const campaign = result.rows[0];
 
@@ -818,14 +818,14 @@ app.get('/api/assessments', authenticateToken, async (req, res) => {
 // POST /api/support_sessions - Schedule session
 app.post('/api/support_sessions', authenticateToken, requireRole('tutor', 'admin'), async (req, res) => {
     try {
-        const { subject, assessment_date, session_date, confusion_topics } = req.body;
-        if (!subject || !session_date) {
-            return res.status(400).json({ error: 'subject and session_date are required' });
+        const { student_name, subject, assessment_date, session_date, confusion_topics } = req.body;
+        if (!student_name || !subject || !session_date) {
+            return res.status(400).json({ error: 'student_name, subject and session_date are required' });
         }
         const result = await pool.query(
-            `INSERT INTO support_sessions (subject, assessment_date, session_date, confusion_topics, scheduled_by)
-             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-            [subject, assessment_date, session_date, confusion_topics, req.user.id]
+            `INSERT INTO support_sessions (student_name, subject, assessment_date, session_date, confusion_topics, scheduled_by)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [student_name, subject, assessment_date, session_date, confusion_topics, req.user.id]
         );
         res.json({ session: result.rows[0] });
     } catch (error) {
