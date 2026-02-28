@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -22,6 +23,10 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.static('.'));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // ============================================
 // RATE LIMITING (Day 2)
