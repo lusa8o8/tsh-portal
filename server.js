@@ -819,13 +819,13 @@ app.get('/api/assessments', authenticateToken, async (req, res) => {
 app.post('/api/support_sessions', authenticateToken, requireRole('tutor', 'admin'), async (req, res) => {
     try {
         const { student_name, subject, assessment_date, session_date, confusion_topics } = req.body;
-        if (!student_name || !subject || !session_date) {
-            return res.status(400).json({ error: 'student_name, subject and session_date are required' });
+        if (!subject || !session_date) {
+            return res.status(400).json({ error: 'subject and session_date are required' });
         }
         const result = await pool.query(
             `INSERT INTO support_sessions (student_name, subject, assessment_date, session_date, confusion_topics, scheduled_by)
              VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [student_name, subject, assessment_date, session_date, confusion_topics, req.user.id]
+            [student_name || null, subject, assessment_date, session_date, confusion_topics, req.user.id]
         );
         res.json({ session: result.rows[0] });
     } catch (error) {
