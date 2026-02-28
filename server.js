@@ -1197,5 +1197,5 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005;
 app.listen(PORT, () => console.log(`🚀 TSH PORTAL Backend (Week 4) running on port ${PORT}`));
