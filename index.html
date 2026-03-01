@@ -79,8 +79,108 @@
             font-weight: 600;
         }
 
+        .view-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
         .promo-details {
             margin-bottom: 15px;
+        }
+
+        /* Overview Instruction Styling */
+        .intro-text {
+            color: #6c757d;
+            font-size: 14px;
+            line-height: 1.6;
+            margin: 0 0 25px 0;
+            padding: 15px;
+            background: #e7f3ff;
+            border-radius: 4px;
+            border-left: 3px solid #007bff;
+        }
+
+        .instruction-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 3px solid #007bff;
+        }
+
+        .section-title {
+            margin: 0 0 10px 0;
+            font-size: 17px;
+            font-weight: 600;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-intro {
+            margin: 0 0 15px 0;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #495057;
+            font-style: italic;
+        }
+
+        .help-list {
+            margin: 0;
+            padding-left: 20px;
+            list-style: none;
+        }
+
+        .help-list li {
+            margin-bottom: 16px;
+            line-height: 1.5;
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .help-list li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #007bff;
+            font-weight: bold;
+        }
+
+        .help-list li:last-child {
+            margin-bottom: 0;
+        }
+
+        .action-path {
+            display: inline-block;
+            color: #007bff;
+            font-weight: 500;
+            margin-left: 4px;
+        }
+
+        .help-subtext {
+            color: #6c757d;
+            font-size: 13px;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
+        .help-footer {
+            margin-top: 30px;
+            padding: 15px;
+            background: #fff3cd;
+            border-radius: 4px;
+            border-left: 3px solid #ffc107;
+        }
+
+        .help-footer p {
+            margin: 0;
+            color: #856404;
+            font-size: 14px;
+            font-weight: 500;
         }
 
         .promo-actions {
@@ -111,6 +211,73 @@
             letter-spacing: 0.5px;
             color: rgba(255, 255, 255, 0.5);
         }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #212529;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-modal:hover {
+            color: #212529;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #dee2e6;
+            display: flex;
+            justify-content: flex-end;
+        }
     </style>
 </head>
 
@@ -118,6 +285,44 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        const showToast = (message, type = 'success') => {
+            const toast = document.createElement('div');
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                background: ${type === 'success' ? '#28a745' : '#dc3545'};
+                color: white;
+                border-radius: 4px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 10000;
+                font-size: 14px;
+                animation: slideIn 0.3s ease;
+            `;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        };
+
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { transform: translateX(400px); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOut {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(400px); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
         const { useState, useEffect } = React;
         const API_URL = 'http://localhost:3005/api';
 
@@ -220,6 +425,39 @@
 
         function Dashboard({ user, onLogout }) {
             const [tab, setTab] = useState('overview');
+            const [viewSwitchCount, setViewSwitchCount] = React.useState(0);
+
+            const handleTabSwitch = (tabName) => {
+                localStorage.setItem('tsh_currentView', tabName);
+                const newCount = viewSwitchCount + 1;
+                setViewSwitchCount(newCount);
+
+                if (newCount >= 1) {
+                    localStorage.setItem('tsh_lastView', tabName);
+                    localStorage.setItem('tsh_refresh', '1');
+                    window.location.reload();
+                    return;
+                }
+
+                setTab(tabName);
+            };
+
+            React.useEffect(() => {
+                const needsRestore = localStorage.getItem('tsh_refresh');
+                const lastView = localStorage.getItem('tsh_lastView');
+                const currentView = localStorage.getItem('tsh_currentView');
+
+                if (needsRestore === '1' && lastView) {
+                    localStorage.removeItem('tsh_refresh');
+                    localStorage.removeItem('tsh_lastView');
+                    setViewSwitchCount(0);
+                    setTab(lastView);
+                } else if (currentView) {
+                    setViewSwitchCount(0);
+                    setTab(currentView);
+                }
+            }, []);
+
             const [unreadCount, setUnreadCount] = useState(0);
 
             useEffect(() => {
@@ -297,27 +535,27 @@
                             {(user.role === 'hod' || user.role === 'admin') ? (
                                 <>
                                     {[{ id: 'overview', icon: '📊', label: 'Overview' }, { id: 'inbox', icon: '📬', label: 'Inbox' }].map(t => (
-                                        <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); setTab(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors relative ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
+                                        <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); handleTabSwitch(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors relative ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
                                             <span class="mr-3">{t.icon}</span> {t.label}
                                             {t.id === 'inbox' && unreadCount > 0 && <span class="notification-badge">{unreadCount}</span>}
                                         </a>
                                     ))}
                                     <div class="sidebar-divider"><span class="sidebar-section-label">Teaching Functions</span></div>
                                     {[{ id: 'campaigns', icon: '📅', label: 'My Campaigns' }, { id: 'assessments', icon: '📋', label: 'Assessment Map' }, { id: 'sessions', icon: '🎯', label: 'Support Sessions' }, { id: 'hub', icon: '📚', label: 'Study Hub' }].map(t => (
-                                        <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); setTab(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
+                                        <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); handleTabSwitch(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
                                             <span class="mr-3">{t.icon}</span> {t.label}
                                         </a>
                                     ))}
                                     <div class="sidebar-divider"><span class="sidebar-section-label">Management</span></div>
                                     {[{ id: 'campaign-approvals', icon: '✅', label: 'Campaign Approvals' }, { id: 'assets', icon: '📤', label: 'Upload Queue' }, { id: 'strategic', icon: '🗓️', label: 'Strategic View' }, { id: 'sop-management', icon: '⚙️', label: 'SOP Management' }].map(t => (
-                                        <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); setTab(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
+                                        <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); handleTabSwitch(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
                                             <span class="mr-3">{t.icon}</span> {t.label}
                                         </a>
                                     ))}
                                 </>
                             ) : (
                                 tabs.map(t => (
-                                    <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); setTab(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors relative ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
+                                    <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); handleTabSwitch(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors relative ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
                                         <span class="mr-3">{t.icon}</span> {t.label}
                                         {t.id === 'inbox' && unreadCount > 0 && <span class="notification-badge">{unreadCount}</span>}
                                     </a>
@@ -366,150 +604,353 @@
 
                     {user.role === 'tutor' && (
                         <div class="mt-8">
-                            <section class="quick-start">
+                            <div class="quick-start">
                                 <h2>Getting Started</h2>
+                                <p class="intro-text">
+                                    Welcome to TSH ERP! This guide explains how to use the system. Once familiar, work directly from the sidebar.
+                                </p>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">📚 Campaign Management</h3>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Submit a campaign:</strong>
+                                            <span class="action-path">Click "My Campaigns" in sidebar → "+ New Campaign" button</span>
+                                            <div class="help-subtext">
+                                                Propose classes based on student needs and exam timing
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>After HOD approval:</strong>
+                                            <span class="action-path">Prepare your lesson materials</span>
+                                            <div class="help-subtext">
+                                                You'll receive a notification when approved
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">📤 Content Creation & Materials</h3>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Upload teaching materials:</strong>
+                                            <span class="action-path">Click "Upload Queue" in sidebar → "+ Upload Asset" button</span>
+                                            <div class="help-subtext">
+                                                Submit worksheets, guides, and solutions to Google Drive first, then submit the link
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Track upload status:</strong>
+                                            <span class="action-path">Click "Upload Queue" → View your submissions</span>
+                                            <div class="help-subtext">
+                                                See pending (awaiting CM approval), approved, or published materials
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">🎓 Student Support & Sessions</h3>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Schedule support session:</strong>
+                                            <span class="action-path">Click "Support Sessions" in sidebar → "+ Schedule Session" button</span>
+                                            <div class="help-subtext">
+                                                Schedule 1-on-1 sessions with students
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Before sessions:</strong>
+                                            <span class="action-path">Click "Support Sessions" → Find student → Review gap logs</span>
+                                            <div class="help-subtext">
+                                                Check what topics the student struggled with previously
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>After sessions:</strong>
+                                            <span class="action-path">Click "Support Sessions" → Find session → "Log Gaps" button</span>
+                                            <div class="help-subtext">
+                                                Record new confusion topics discovered during the session
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">📅 Planning & Coordination</h3>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Check exam schedule:</strong>
+                                            <span class="action-path">Click "Assessment Map" in sidebar</span>
+                                            <div class="help-subtext">
+                                                View upcoming exams with pressure levels. Plan campaigns around high-pressure windows
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Browse teaching resources:</strong>
+                                            <span class="action-path">Click "Study Hub" in sidebar</span>
+                                            <div class="help-subtext">
+                                                View all published teaching materials available to students
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">🧭 System Navigation</h3>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Check notifications:</strong>
+                                            <span class="action-path">Click "Inbox" in sidebar (badge shows unread count)</span>
+                                            <div class="help-subtext">
+                                                Campaign approvals/rejections, asset updates, system alerts
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>View strategic insights:</strong>
+                                            <span class="action-path">Click "Strategic View" in sidebar</span>
+                                            <div class="help-subtext">
+                                                See high-level analytics and trends across the teaching team
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="help-footer">
+                                    <p><strong>Need Help?</strong> Check the guidance above or contact support via Inbox.</p>
+                                </div>
+
+                                {sopLinks.filter(l => l.section === 'overview').length > 0 && (
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">📄 Official Procedures (SOPs)</h3>
+                                        <ul class="help-list">
+                                            {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                                <li key={link.id}>
+                                                    <strong>{link.link_text}:</strong> {link.description}
+                                                    <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">View Notion SOP</a></small>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {user.role === 'hod' && (
+                        <div class="mt-8">
+                            <div class="quick-start">
+                                <h2>Getting Started</h2>
+                                <p class="intro-text">
+                                    Welcome to the HOD interface! You have both Teaching and Management functions. This guide explains both.
+                                </p>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">📚 Teaching Functions</h3>
+                                    <p class="section-intro">As HOD, you can also teach. Your submissions auto-approve and skip the approval queue.</p>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Submit your campaign:</strong>
+                                            <span class="action-path">Click "My Campaigns" (Teaching section) → "+ New Campaign" button</span>
+                                            <div class="help-subtext">
+                                                Your campaigns auto-approve immediately and go straight to Marketing/CRM
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Upload your materials:</strong>
+                                            <span class="action-path">Click "Upload Queue" (Teaching section) → "+ Upload Asset" button</span>
+                                            <div class="help-subtext">
+                                                Your uploads go to Content Manager for review, same as tutor uploads
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Schedule your sessions:</strong>
+                                            <span class="action-path">Click "Support Sessions" (Teaching section) → "+ Schedule" button</span>
+                                            <div class="help-subtext">
+                                                Schedule your own 1-on-1 student support sessions
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>View your work:</strong>
+                                            <span class="action-path">Each Teaching tab shows only YOUR submissions</span>
+                                            <div class="help-subtext">
+                                                My Campaigns = your campaigns only, Upload Queue = your uploads by default
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">⚙️ Management Functions</h3>
+                                    <p class="section-intro">Review tutor work, manage capacity, and update system guidance.</p>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Review tutor campaigns:</strong>
+                                            <span class="action-path">Click "Campaign Approvals" (Management section)</span>
+                                            <div class="help-subtext">
+                                                See all pending campaigns from tutors. Check subject, date, goals, alignment. Click "Approve" or "Reject"
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Monitor tutor uploads:</strong>
+                                            <span class="action-path">Click "Upload Queue" → "All Uploads" toggle button</span>
+                                            <div class="help-subtext">
+                                                Track what tutors are submitting. Content Manager handles quality approval
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Plan teaching capacity:</strong>
+                                            <span class="action-path">Click "Assessment Map" (Management section)</span>
+                                            <div class="help-subtext">
+                                                View upcoming exams with pressure levels. Add new assessments with "+ New Assessment"
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Review published content:</strong>
+                                            <span class="action-path">Click "Study Hub" (Management section)</span>
+                                            <div class="help-subtext">
+                                                See all published teaching materials. Identify content gaps
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>Manage tutor guidance:</strong>
+                                            <span class="action-path">Click "SOP Management" (Management section)</span>
+                                            <div class="help-subtext">
+                                                Update Notion SOP links shown to tutors. Changes appear immediately
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="instruction-section">
+                                    <h3 class="section-title">🧭 System Navigation</h3>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>Check notifications:</strong>
+                                            <span class="action-path">Click "Inbox" in sidebar (badge shows unread count)</span>
+                                            <div class="help-subtext">
+                                                New campaign submissions, tutor updates, system escalations
+                                            </div>
+                                        </li>
+                                        <li>
+                                            <strong>View strategic insights:</strong>
+                                            <span class="action-path">Click "Strategic View" in sidebar</span>
+                                            <div class="help-subtext">
+                                                See high-level analytics, team performance, system health metrics
+                                            </div>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="help-footer">
+                                    <p><strong>Need Help?</strong> Check the guidance above or contact technical support.</p>
+                                </div>
+
+                                {sopLinks.filter(l => l.section === 'overview').length > 0 && (
+                                    <div class="instruction-section">
+                                        <h3 class="section-title">📄 Official Procedures (SOPs)</h3>
+                                        <ul class="help-list">
+                                            {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                                <li key={link.id}>
+                                                    <strong>{link.link_text}:</strong> {link.description}
+                                                    <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">View Notion SOP</a></small>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {user.role === 'admin' && (
+                        <div class="mt-8">
+                            <section class="quick-start">
+                                <h2>System Administration</h2>
                                 <div class="help-section">
                                     <h3>Common Tasks</h3>
                                     <ul class="help-list">
-                                        <li><strong>Submit a campaign:</strong> Campaigns → "+ New Campaign" button<br /><small class="block text-gray-500 mt-1">Propose classes based on student needs and exam timing</small></li>
-
-                                        {sopLinks.filter(l => l.section === 'overview').map(link => (
-                                            <li key={link.id}>
-                                                <strong>{link.description?.split(',')[0] || link.link_text}:</strong> {link.description}
-                                                <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
-                                            </li>
-                                        ))}
-
-                                        <li><strong>Before support sessions:</strong> Review student's gap logs in Support Sessions tab<br /><small class="block text-gray-500 mt-1">Focus on weak topics they've struggled with before</small></li>
-                                        <li><strong>After support sessions:</strong> Support Sessions → Find session → Log gaps discovered</li>
-                                        <li><strong>Check notifications:</strong> Click "Inbox" in the sidebar (badge shows new items)</li>
-                                        <li><strong>Browse teaching resources:</strong> Study Hub Inventory tab</li>
-                                    </ul>
-                                </div>
-                                <div class="help-section">
-                                    <h3>Need Help?</h3>
-                                    <ul class="help-list">
-                                        <li>Check your <strong>Inbox</strong> for system notifications and HOD responses</li>
-                                        <li>Contact HOD directly for urgent campaign approvals</li>
-                                        <li>Technical issues: Email <a href="mailto:support@tsh.com" class="text-blue-600 underline">support@tsh.com</a></li>
+                                        <li><strong>Manage governance rules:</strong> Oversee campaigns and workflows</li>
+                                        <li><strong>Monitor database integrity:</strong> Validate metrics on the dashboard</li>
+                                        <li><strong>System audits:</strong> Review all role activity and notifications</li>
                                     </ul>
                                 </div>
                             </section>
                         </div>
                     )}
 
-                    {user.role === 'hod' && (
-                        <section class="quick-start">
-                            <h2>Getting Started</h2>
-                            <div class="help-section">
-                                <h3>Common Tasks</h3>
-                                <ul class="help-list">
-                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
-                                        <li key={link.id}>
-                                            <strong>{link.description.split(',')[0] || link.link_text}:</strong> {link.description}
-                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
-                                        </li>
-                                    ))}
-                                    <li>
-                                        <strong>Review Hub Resources:</strong> Upload Queue → review pending hub_asset submissions
-                                        <br /><small class="block text-gray-500 mt-1">Check quality, alignment with learning goals, completeness. Read Tutor Notes for reviewer context.</small>
-                                    </li>
-                                    <li><strong>Monitor student gaps:</strong> Support Sessions → View gap logs<br /><small class="block text-gray-500 mt-1">Identify recurring struggles that need Hub resources or campaigns</small></li>
-                                    <li><strong>Review Hub inventory:</strong> Study Hub Inventory tab — see published materials, identify content gaps</li>
-                                    <li><strong>Check notifications:</strong> Click "Inbox" in the sidebar (badge shows escalated items)</li>
-                                    <li><strong>Monitor sessions:</strong> Support Sessions tab to overview completed gap logs</li>
-                                </ul>
-                            </div>
-                            <div class="help-section">
-                                <h3>Need Help?</h3>
-                                <ul class="help-list">
-                                    <li>Check your <strong>Inbox</strong> for escalations requiring your review</li>
-                                    <li>Contact Technical Support for platform anomalies</li>
-                                    <li>Technical issues: Email <a href="mailto:support@tsh.com" class="text-blue-600 underline">support@tsh.com</a></li>
-                                </ul>
-                            </div>
-                        </section>
-                    )}
-
-                    {user.role === 'admin' && (
-                        <section class="quick-start">
-                            <h2>System Administration</h2>
-                            <div class="help-section">
-                                <h3>Common Tasks</h3>
-                                <ul class="help-list">
-                                    <li><strong>Manage governance rules:</strong> Oversee campaigns and workflows</li>
-                                    <li><strong>Monitor database integrity:</strong> Validate metrics on the dashboard</li>
-                                    <li><strong>System audits:</strong> Review all role activity and notifications</li>
-                                </ul>
-                            </div>
-                        </section>
-                    )}
-
                     {user.role === 'content_manager' && (
-                        <section class="quick-start">
-                            <h2>Getting Started</h2>
-                            <div class="help-section">
-                                <h3>Common Tasks</h3>
-                                <ul class="help-list">
-                                    <li>
-                                        <strong>📹 Free Class Content:</strong>
-                                        Asset Queue → "Free Content" tab → review uploads from tutors
-                                        <br /><small class="block text-gray-500 mt-1">→ Auto-approved on upload. Use "Mark Published" when edit is complete, or "Request Revision" to send back to tutor.</small>
-                                    </li>
-                                    <li>
-                                        <strong>📚 Hub Resources:</strong>
-                                        Asset Queue → "Hub Resources" tab → quality-check and publish tutor submissions
-                                        <br /><small class="block text-gray-500 mt-1">→ Hub assets now come directly to you (no HOD step). Review tutor notes, then "Approve & Publish to Hub".</small>
-                                    </li>
-                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
-                                        <li key={link.id}>
-                                            <strong>{link.link_text}:</strong> {link.description}
-                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                        <div class="mt-8">
+                            <section class="quick-start">
+                                <h2>Getting Started</h2>
+                                <div class="help-section">
+                                    <h3>Common Tasks</h3>
+                                    <ul class="help-list">
+                                        <li>
+                                            <strong>📹 Free Class Content:</strong>
+                                            Asset Queue → "Free Content" tab → review uploads from tutors
+                                            <br /><small class="block text-gray-500 mt-1">→ Auto-approved on upload. Use "Mark Published" when edit is complete, or "Request Revision" to send back to tutor.</small>
                                         </li>
-                                    ))}
-                                    <li><strong>Check notifications:</strong> Click "Inbox" to see alerts when new content arrives</li>
-                                </ul>
-                            </div>
-                        </section>
+                                        <li>
+                                            <strong>📚 Hub Resources:</strong>
+                                            Asset Queue → "Hub Resources" tab → quality-check and publish tutor submissions
+                                            <br /><small class="block text-gray-500 mt-1">→ Hub assets now come directly to you (no HOD step). Review tutor notes, then "Approve & Publish to Hub".</small>
+                                        </li>
+                                        {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                            <li key={link.id}>
+                                                <strong>{link.link_text}:</strong> {link.description}
+                                                <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                            </li>
+                                        ))}
+                                        <li><strong>Check notifications:</strong> Click "Inbox" to see alerts when new content arrives</li>
+                                    </ul>
+                                </div>
+                            </section>
+                        </div>
                     )}
 
                     {user.role === 'marketing' && (
-                        <section class="quick-start">
-                            <h2>Getting Started</h2>
-                            <div class="help-section">
-                                <h3>Common Tasks</h3>
-                                <ul class="help-list">
-                                    <li><strong>📅 View approved campaigns:</strong> Click the <strong>Campaigns</strong> tab in the sidebar<br /><small class="block text-gray-500 mt-1">See full campaign details (date, topic, tutor, goals) ready for promotion</small></li>
-                                    <li><strong>📣 Inbox alerts:</strong> Click "Inbox" for notifications when new campaigns are approved and ready to promote</li>
-                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
-                                        <li key={link.id}>
-                                            <strong>{link.link_text}:</strong> {link.description}
-                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </section>
-                    )}
-                    {user.role === 'crm' && (
-                        <section class="quick-start">
-                            <h2>Getting Started</h2>
-                            <div class="help-section">
-                                <h3>Common Tasks</h3>
-                                <ul class="help-list">
-                                    <li><strong>📅 Track campaigns:</strong> Click the <strong>Campaigns</strong> tab in the sidebar<br /><small class="block text-gray-500 mt-1">See approved campaigns and upcoming sessions for follow-up and conversion</small></li>
-                                    <li><strong>📨 Inbox tracking:</strong> Check system notifications regarding active promotional funnels</li>
-                                    {sopLinks.filter(l => l.section === 'overview').map(link => (
-                                        <li key={link.id}>
-                                            <strong>{link.link_text}:</strong> {link.description}
-                                            <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        </section>
+                        <div class="mt-8">
+                            <section class="quick-start">
+                                <h2>Getting Started</h2>
+                                <div class="help-section">
+                                    <h3>Common Tasks</h3>
+                                    <ul class="help-list">
+                                        <li><strong>📅 View approved campaigns:</strong> Click the <strong>Campaigns</strong> tab in the sidebar<br /><small class="block text-gray-500 mt-1">See full campaign details (date, topic, tutor, goals) ready for promotion</small></li>
+                                        <li><strong>📣 Inbox alerts:</strong> Click "Inbox" for notifications when new campaigns are approved and ready to promote</li>
+                                        {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                            <li key={link.id}>
+                                                <strong>{link.link_text}:</strong> {link.description}
+                                                <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </section>
+                        </div>
                     )}
 
+                    {user.role === 'crm' && (
+                        <div class="mt-8">
+                            <section class="quick-start">
+                                <h2>Getting Started</h2>
+                                <div class="help-section">
+                                    <h3>Common Tasks</h3>
+                                    <ul class="help-list">
+                                        <li><strong>📅 Track campaigns:</strong> Click the <strong>Campaigns</strong> tab in the sidebar<br /><small class="block text-gray-500 mt-1">See approved campaigns and upcoming sessions for follow-up and conversion</small></li>
+                                        <li><strong>📨 Inbox tracking:</strong> Check system notifications regarding active promotional funnels</li>
+                                        {sopLinks.filter(l => l.section === 'overview').map(link => (
+                                            <li key={link.id}>
+                                                <strong>{link.link_text}:</strong> {link.description}
+                                                <br /><small class="block text-gray-500 mt-1">📄 <a href={link.sop_url} target="_blank" rel="noopener" class="text-blue-600 underline">{link.link_text}</a></small>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            </section>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -908,12 +1349,50 @@
             const [cmTab, setCmTab] = useState('free');
             const load = () => { api.getAssets().then(d => setAllAssets(d.assets)); };
             useEffect(load, []);
-            const publish = (id) => api.publishAsset(id).then(load).catch(e => alert(e.message));
+            const publish = (id) => api.publishAsset(id).then(() => { showToast('Asset published'); load(); }).catch(e => alert(e.message));
             const requestRevision = (asset) => {
                 const reason = prompt(`Request revision for "${asset.topic}"\n\nReason for revision:`);
                 if (!reason) return;
                 api.requestRevision(asset.id, reason).then(load).catch(e => alert(e.message));
             };
+
+            let currentRejectingAssetId = null;
+
+            const rejectAsset = async (assetId) => {
+                currentRejectingAssetId = assetId;
+                document.getElementById('rejection-reason').value = '';
+                document.getElementById('asset-rejection-modal').style.display = 'flex';
+            };
+
+            const closeAssetRejectionModal = () => {
+                document.getElementById('asset-rejection-modal').style.display = 'none';
+                currentRejectingAssetId = null;
+            };
+
+            const confirmAssetRejection = async () => {
+                const reason = document.getElementById('rejection-reason').value.trim();
+
+                if (!reason) {
+                    alert('Please provide a rejection reason');
+                    return;
+                }
+
+                if (!currentRejectingAssetId) {
+                    alert('Error: No asset selected');
+                    return;
+                }
+
+                try {
+                    await api.updateAsset(currentRejectingAssetId, 'rejected', reason);
+                    closeAssetRejectionModal();
+                    showToast('Asset rejected');
+                    load();
+                } catch (err) {
+                    console.error('Error rejecting asset:', err);
+                    alert('Failed to reject asset');
+                }
+            };
+
 
             const freeAssets = allAssets.filter(a => a.asset_category === 'free_asset');
             const hubAssets = allAssets.filter(a => a.asset_category === 'hub_asset');
@@ -1000,7 +1479,28 @@
                                     )}
 
                                     {(a.status === 'pending_cm' || a.status === 'approved') && (
-                                        <button onClick={() => publish(a.id)} class="mt-4 bg-green-600 text-white px-4 py-2 rounded text-xs font-bold uppercase hover:bg-green-700">Approve & Publish to Hub</button>
+                                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                            <button
+                                                onClick={() => api.updateAsset(a.id, 'approved', '').then(() => { showToast('Asset approved'); load(); })}
+                                                class="bg-green-600 hover:bg-green-700 text-white"
+                                                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                                ✓ Approve
+                                            </button>
+
+                                            <button
+                                                onClick={() => publish(a.id)}
+                                                class="bg-blue-600 hover:bg-blue-700 text-white"
+                                                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                                📚 Publish to Hub
+                                            </button>
+
+                                            <button
+                                                onClick={() => rejectAsset(a.id)}
+                                                class="bg-red-600 hover:bg-red-700 text-white"
+                                                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                                ✗ Reject
+                                            </button>
+                                        </div>
                                     )}
                                     {a.status === 'published' && <p class="text-[10px] text-green-600 mt-4 font-bold uppercase tracking-widest">✓ Published {new Date(a.published_at).toLocaleDateString()}</p>}
                                 </div>
@@ -1008,6 +1508,48 @@
                             {hubAssets.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded-xl text-gray-400 italic text-sm">No hub assets to publish.</div>}
                         </div>
                     )}
+
+                    {/* Asset Rejection Modal */}
+                    <div id="asset-rejection-modal" class="modal" style={{ display: 'none' }}>
+                        <div class="modal-content" style={{ maxWidth: '500px' }}>
+                            <div class="modal-header">
+                                <h2>Reject Asset</h2>
+                                <button class="close-modal" onClick={closeAssetRejectionModal}>×</button>
+                            </div>
+
+                            <div class="modal-body">
+                                <p style={{ marginBottom: '15px', color: '#6c757d' }}>
+                                    Please provide a reason for rejecting this asset. This will be sent to the tutor.
+                                </p>
+
+                                <label htmlFor="rejection-reason" style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>
+                                    Rejection Reason: *
+                                </label>
+                                <textarea
+                                    id="rejection-reason"
+                                    rows="4"
+                                    placeholder="Enter reason for rejection..."
+                                    style={{ width: '100%', padding: '10px', border: '1px solid #dee2e6', borderRadius: '4px', fontSize: '14px', fontFamily: 'inherit' }}>
+                                </textarea>
+                            </div>
+
+                            <div class="modal-footer">
+                                <button
+                                    class="bg-gray-200 text-gray-800 hover:bg-gray-300"
+                                    onClick={closeAssetRejectionModal}
+                                    style={{ marginRight: '10px', padding: '8px 16px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                    Cancel
+                                </button>
+                                <button
+                                    class="bg-red-600 text-white hover:bg-red-700"
+                                    onClick={confirmAssetRejection}
+                                    id="confirm-rejection-btn"
+                                    style={{ padding: '8px 16px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                    ✗ Reject Asset
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             );
         }
@@ -1226,19 +1768,29 @@
                         {user.role === 'tutor' && <button onClick={() => setShowNew(true)} class="bg-black text-white px-4 py-2 rounded text-sm">+ Upload Asset</button>}
 
                         {(user.role === 'hod' || user.role === 'admin') && (
-                            <div class="flex bg-gray-100 p-1 rounded-lg">
-                                <button
-                                    onClick={() => setViewMode('all')}
-                                    class={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                                >
-                                    Oversight: All Staff
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('mine')}
-                                    class={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'mine' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                                >
-                                    My Uploads
-                                </button>
+                            <div class="view-actions">
+                                <div class="flex bg-gray-100 p-1 rounded-lg">
+                                    <button
+                                        onClick={() => setViewMode('all')}
+                                        class={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        Oversight: All Staff
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('mine')}
+                                        class={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'mine' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    >
+                                        My Uploads
+                                    </button>
+                                </div>
+                                {viewMode === 'mine' && (
+                                    <button
+                                        onClick={() => setShowNew(true)}
+                                        class="bg-black text-white px-4 py-2 rounded text-sm"
+                                    >
+                                        + Upload Asset
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1283,7 +1835,7 @@
             const [tutorNotes, setTutorNotes] = useState('');
             const [topic, setTopic] = useState('');
             const [selectedCategory, setSelectedCategory] = useState(null);
-            const [selected, setSelected] = useState({}); // { asset_type: drive_link }
+            const [selected, setSelected] = useState({}); // {asset_type: drive_link }
             const [err, setErr] = useState('');
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [success, setSuccess] = useState(false);
