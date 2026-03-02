@@ -566,7 +566,7 @@
                 { id: 'sessions', icon: '🎯', label: 'Support Sessions', roles: ['tutor', 'hod', 'admin'] },
                 { id: 'sop-management', icon: '⚙️', label: 'SOP Management', roles: ['hod', 'admin'] },
                 { id: 'hub', icon: '📚', label: 'Study Hub', roles: ['tutor', 'hod', 'admin'] },
-                { id: 'strategic', icon: '🗓️', label: 'Strategic View', roles: ['hod', 'admin'] },
+                { id: 'strategic', icon: '🗓️', label: 'Strategic View', roles: ['admin', 'hod', 'tutor', 'content_manager', 'marketing', 'crm'] },
                 { id: 'leads', icon: '👥', label: 'Leads', roles: ['crm'] },
                 { id: 'follow-ups', icon: '📞', label: 'Follow-ups', roles: ['crm'] },
                 { id: 'conversions', icon: '✅', label: 'Conversions', roles: ['crm'] }
@@ -2741,8 +2741,12 @@
             const [campaigns, setCampaigns] = useState([]);
 
             useEffect(() => {
-                api.getAssessments().then(d => setAssessments(d.assessments));
-                api.getCampaigns({ status: 'approved' }).then(d => setCampaigns(d.campaigns));
+                api.getAssessments()
+                    .then(d => setAssessments(d?.assessments || []))
+                    .catch(err => console.error("Strategic View - Assessments fetch error:", err));
+                api.getCampaigns({ status: 'approved' })
+                    .then(d => setCampaigns(d?.campaigns || []))
+                    .catch(err => console.error("Strategic View - Campaigns fetch error:", err));
             }, []);
 
             // Group by Month
@@ -2790,7 +2794,7 @@
                                         {campaigns.filter(c => getMonthKey(c.target_date) === month).map(c => (
                                             <div key={c.id} class="flex justify-between items-center p-3 rounded bg-blue-50 border border-blue-100">
                                                 <span class="text-xs font-bold text-blue-900">{c.topic}</span>
-                                                <span class="text-[10px] text-blue-500 font-medium">{c.tutor_name}</span>
+                                                <span class="text-[10px] text-blue-500 font-medium">{c.created_by_name}</span>
                                             </div>
                                         ))}
                                         {campaigns.filter(c => getMonthKey(c.target_date) === month).length === 0 && (
