@@ -354,8 +354,8 @@
 
         const { useState, useEffect } = React;
         const API_URL = window.location.hostname === 'localhost'
-            ? 'http://localhost:3005/api'
-            : `https://${window.location.hostname}:3005/api`;
+            ? 'http://localhost:3005'
+            : '';  // Use Nginx reverse proxy
 
         const CustomConfirm = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', cancelText = 'Cancel' }) => {
             if (!isOpen) return null;
@@ -1132,7 +1132,7 @@
                         <h3>{c.subject} — {c.topic}</h3>
                     </div>
                     <div class="card-body">
-                        <p><strong>📅 Date:</strong> {c.target_date ? new Date(c.target_date).toLocaleDateString() : '—'}</p>
+                        <p><strong>📅 Date:</strong> {c.target_date ? `${new Date(c.target_date).toLocaleDateString()} ${c.target_time ? `at ${c.target_time}` : ''}` : '—'}</p>
                         <p><strong>👤 Tutor:</strong> {c.creator_status === 'deleted' ? "[Deleted User]" : (c.created_by_name || 'Unknown')}</p>
                         <p><strong>🎓 Learning Goals:</strong> {c.outcomes || 'Not specified'}</p>
                         {c.trick_pattern && <p><strong>🎯 Exam Pattern:</strong> {c.trick_pattern}</p>}
@@ -1222,7 +1222,7 @@
                                         </div>
                                         <div class="card-body">
                                             <div class="promo-details">
-                                                <p><strong>📅 Date:</strong> {c.target_date ? new Date(c.target_date).toLocaleDateString() : '—'}</p>
+                                                <p><strong>📅 Date:</strong> {c.target_date ? `${new Date(c.target_date).toLocaleDateString()} ${c.target_time ? `at ${c.target_time}` : ''}` : '—'}</p>
                                                 <p><strong>📚 Course:</strong> {c.subject}</p>
                                                 <p><strong>🎯 Topic:</strong> {c.topic}</p>
                                                 <p><strong>👤 Tutor:</strong> {c.creator_status === 'deleted' ? "[Deleted User]" : (c.created_by_name || 'Unknown')}</p>
@@ -2118,7 +2118,7 @@
         }
 
         function CampaignForm({ onCancel, onSuccess }) {
-            const [form, setForm] = useState({ subject: '', topic: '', trick_pattern: '', outcomes: '', target_date: '' });
+            const [form, setForm] = useState({ subject: '', topic: '', trick_pattern: '', outcomes: '', target_date: '', target_time: '' });
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [success, setSuccess] = useState(false);
 
@@ -2148,7 +2148,11 @@
                     <h3 class="font-bold mb-4 italic">Campaign Intake</h3>
                     <div class="grid grid-cols-2 gap-4 mb-4">
                         <input placeholder="Subject/Course (e.g. G12 Math)" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, subject: e.target.value })} required />
-                        <input type="date" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, target_date: e.target.value })} />
+                        <input type="date" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, target_date: e.target.value })} required />
+                        <div class="flex flex-col gap-1">
+                            <input type="time" class="border p-2 rounded text-sm w-full" onChange={e => setForm({ ...form, target_time: e.target.value })} required />
+                            <p class="text-[10px] text-gray-400">Class/Campaign Time (required)</p>
+                        </div>
                     </div>
                     <input placeholder="Campaign Topic" class="w-full border p-2 rounded mb-4 text-sm" onChange={e => setForm({ ...form, topic: e.target.value })} required />
 
@@ -2190,7 +2194,7 @@
                             <div>
                                 <p class="text-xs font-bold text-gray-400 uppercase mb-1">{campaign.subject}</p>
                                 <h3 class="text-lg font-bold">{campaign.topic}</h3>
-                                <p class="text-xs text-gray-400">By {campaign.creator_status === 'deleted' ? "[Deleted User]" : campaign.tutor_name} · Target: {campaign.target_date || 'TBD'}</p>
+                                <p class="text-xs text-gray-400">By {campaign.creator_status === 'deleted' ? "[Deleted User]" : campaign.tutor_name} · Target: {campaign.target_date ? new Date(campaign.target_date).toLocaleDateString() : 'TBD'} {campaign.target_time ? ` at ${campaign.target_time}` : ''}</p>
                             </div>
                         </div>
                         <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{campaign.status.replace('_', ' ')}</span>
@@ -2916,9 +2920,14 @@
                                     <p class="text-[10px] font-black uppercase text-blue-500 mb-3 tracking-widest">Aligned Campaigns</p>
                                     <div class="space-y-2">
                                         {campaigns.filter(c => getMonthKey(c.target_date) === month).map(c => (
-                                            <div key={c.id} class="flex justify-between items-center p-3 rounded bg-blue-50 border border-blue-100">
-                                                <span class="text-xs font-bold text-blue-900">{c.topic}</span>
-                                                <span class="text-[10px] text-blue-500 font-medium">{c.created_by_name}</span>
+                                            <div key={c.id} class="flex flex-col p-3 rounded bg-blue-50 border border-blue-100">
+                                                <div class="flex justify-between items-start mb-1">
+                                                    <span class="text-xs font-bold text-blue-900">{c.topic}</span>
+                                                    <span class="text-[10px] text-blue-500 font-medium px-1.5 py-0.5 bg-blue-100/50 rounded">{c.created_by_name}</span>
+                                                </div>
+                                                <div class="text-[10px] text-blue-600 font-medium opacity-75">
+                                                    📅 {new Date(c.target_date).toLocaleDateString()} {c.target_time ? `@ ${c.target_time}` : ''}
+                                                </div>
                                             </div>
                                         ))}
                                         {campaigns.filter(c => getMonthKey(c.target_date) === month).length === 0 && (
