@@ -211,73 +211,6 @@
             letter-spacing: 0.5px;
             color: rgba(255, 255, 255, 0.5);
         }
-
-        /* Modal Styles */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .modal-content {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px;
-            border-bottom: 1px solid #dee2e6;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            font-size: 20px;
-            color: #212529;
-        }
-
-        .close-modal {
-            background: none;
-            border: none;
-            font-size: 28px;
-            color: #6c757d;
-            cursor: pointer;
-            padding: 0;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .close-modal:hover {
-            color: #212529;
-        }
-
-        .modal-body {
-            padding: 20px;
-        }
-
-        .modal-footer {
-            padding: 15px 20px;
-            border-top: 1px solid #dee2e6;
-            display: flex;
-            justify-content: flex-end;
-        }
     </style>
 </head>
 
@@ -285,44 +218,6 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const showToast = (message, type = 'success') => {
-            const toast = document.createElement('div');
-            toast.textContent = message;
-            toast.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 12px 20px;
-                background: ${type === 'success' ? '#28a745' : '#dc3545'};
-                color: white;
-                border-radius: 4px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                z-index: 10000;
-                font-size: 14px;
-                animation: slideIn 0.3s ease;
-            `;
-
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                toast.style.animation = 'slideOut 0.3s ease';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        };
-
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes slideIn {
-                from { transform: translateX(400px); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            @keyframes slideOut {
-                from { transform: translateX(0); opacity: 1; }
-                to { transform: translateX(400px); opacity: 0; }
-            }
-        `;
-        document.head.appendChild(style);
-
         const { useState, useEffect } = React;
         const API_URL = 'http://localhost:3005/api';
 
@@ -391,114 +286,25 @@
             return <Dashboard user={user} onLogout={() => { localStorage.removeItem('token'); setUser(null); }} />;
         }
 
-        const LoginForm = ({ onLogin }) => {
+        function LoginPage({ onLogin }) {
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [err, setErr] = useState('');
             const submit = async (e) => {
                 e.preventDefault();
-                try {
-                    const { token, user } = await api.login(email, password);
-                    onLogin(token, user);
-                } catch (e) { setErr(e.message); }
+                try { const { token, user } = await api.login(email, password); onLogin(token, user); }
+                catch (e) { setErr(e.message); }
             };
             return (
-                <form onSubmit={submit}>
-                    {err && <div class="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{err}</div>}
-                    <input type="email" placeholder="Email" class="w-full border p-2 mb-4 rounded text-sm" value={email} onChange={e => setEmail(e.target.value)} required />
-                    <input type="password" placeholder="Password" class="w-full border p-2 mb-6 rounded text-sm" value={password} onChange={e => setPassword(e.target.value)} required />
-                    <button class="w-full bg-black text-white p-2 rounded font-medium text-sm">Login</button>
-                </form>
-            );
-        };
-
-        const SignupForm = ({ onBackToLogin }) => {
-            const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '' });
-            const [subjects, setSubjects] = useState([]);
-            const [err, setErr] = useState('');
-            const [success, setSuccess] = useState(false);
-            const availableSubjects = [
-                'Math (High School)', 'Math (University)',
-                'Physics (High School)', 'Physics (University)',
-                'Chemistry (High School)', 'Chemistry (University)',
-                'Biology (High School)', 'Biology (University)'
-            ];
-
-            const toggleSubject = (s) => {
-                if (subjects.includes(s)) setSubjects(subjects.filter(i => i !== s));
-                else if (subjects.length < 2) setSubjects([...subjects, s]);
-                else setErr('Maximum 2 subjects allowed');
-            };
-
-            const submit = async (e) => {
-                e.preventDefault();
-                setErr('');
-                if (formData.password !== formData.confirmPassword) return setErr('Passwords do not match');
-                if (formData.password.length < 8) return setErr('Password must be at least 8 characters');
-                if (subjects.length === 0) return setErr('Select at least 1 subject');
-
-                try {
-                    const res = await fetch('/api/register', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...formData, subjects })
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error || 'Registration failed');
-                    setSuccess(true);
-                } catch (e) { setErr(e.message); }
-            };
-
-            if (success) return (
-                <div class="text-center py-4">
-                    <div class="text-4xl mb-4">✅</div>
-                    <h2 class="text-lg font-bold text-green-600 mb-2">Success!</h2>
-                    <p class="text-sm text-gray-500 mb-6">Awaiting admin approval. We will notify you via email.</p>
-                    <button onClick={onBackToLogin} class="w-full bg-black text-white p-2 rounded text-sm font-medium">Back to Login</button>
-                </div>
-            );
-
-            return (
-                <form onSubmit={submit} class="space-y-4">
-                    {err && <div class="bg-red-50 text-red-600 p-3 rounded text-sm">{err}</div>}
-                    <input type="text" placeholder="Full Name" class="w-full border p-2 rounded text-sm" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
-                    <input type="email" placeholder="Email" class="w-full border p-2 rounded text-sm" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
-                    <input type="password" placeholder="Password (min 8 chars)" class="w-full border p-2 rounded text-sm" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
-                    <input type="password" placeholder="Confirm Password" class="w-full border p-2 rounded text-sm" value={formData.confirmPassword} onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })} required />
-
-                    <div class="space-y-2">
-                        <p class="text-xs font-bold text-gray-500 uppercase">Subjects (Select 1-2)</p>
-                        <div class="grid grid-cols-2 gap-2">
-                            {availableSubjects.map(s => (
-                                <label key={s} class={`flex items-center p-2 border rounded cursor-pointer transition-colors ${subjects.includes(s) ? 'bg-blue-50 border-blue-200' : 'hover:bg-gray-50'}`}>
-                                    <input type="checkbox" checked={subjects.includes(s)} onChange={() => toggleSubject(s)} class="hidden" />
-                                    <span class="text-[11px] leading-tight">{s}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-                    <button class="w-full bg-green-600 text-white p-2 rounded font-medium text-sm">Create Account</button>
-                </form>
-            );
-        };
-
-        function LoginPage({ onLogin }) {
-            const [isSignup, setIsSignup] = useState(false);
-            return (
-                <div class="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
-                    <div class="w-full max-w-md bg-white p-8 border rounded-lg shadow-sm">
-                        <div class="text-center mb-8">
-                            <h1 class="text-2xl font-bold mb-1">TSH PORTAL</h1>
-                            <p class="text-sm text-gray-400">Campaign & Quality Gate</p>
-                        </div>
-
-                        <div class="flex bg-gray-100 p-1 rounded-lg mb-8">
-                            <button onClick={() => setIsSignup(false)} class={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${!isSignup ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Sign In</button>
-                            <button onClick={() => setIsSignup(true)} class={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${isSignup ? 'bg-white shadow-sm' : 'text-gray-500'}`}>Sign Up</button>
-                        </div>
-
-                        {isSignup ? <SignupForm onBackToLogin={() => setIsSignup(false)} /> : <LoginForm onLogin={onLogin} />}
-                    </div>
+                <div class="flex h-screen items-center justify-center px-4">
+                    <form onSubmit={submit} class="w-full max-w-sm bg-white p-8 border rounded-lg shadow-sm">
+                        <h1 class="text-2xl font-bold mb-1">TSH ERP</h1>
+                        <p class="text-sm text-gray-400 mb-6">Campaign & Quality Gate</p>
+                        {err && <div class="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{err}</div>}
+                        <input type="email" placeholder="Email" class="w-full border p-2 mb-4 rounded text-sm" value={email} onChange={e => setEmail(e.target.value)} required />
+                        <input type="password" placeholder="Password" class="w-full border p-2 mb-6 rounded text-sm" value={password} onChange={e => setPassword(e.target.value)} required />
+                        <button class="w-full bg-black text-white p-2 rounded font-medium text-sm">Login</button>
+                    </form>
                 </div>
             );
         }
@@ -583,7 +389,6 @@
                     {tab === 'assessments' && <AssessmentMap user={user} />}
                     {tab === 'sessions' && <SupportSessions user={user} />}
                     {tab === 'sop-management' && <SopManagementView user={user} />}
-                    {tab === 'user-management' && <UserManagementView user={user} />}
                     {tab === 'hub' && <SubjectHub user={user} />}
                     {tab === 'strategic' && <AssessmentWeekView user={user} />}
                     {tab === 'leads' && <PlaceholderView title="Leads Management" />}
@@ -637,7 +442,7 @@
                                         </a>
                                     ))}
                                     <div class="sidebar-divider"><span class="sidebar-section-label">Management</span></div>
-                                    {[{ id: 'campaign-approvals', icon: '✅', label: 'Campaign Approvals' }, { id: 'assets', icon: '📤', label: 'Upload Queue' }, { id: 'strategic', icon: '🗓️', label: 'Strategic View' }, { id: 'sop-management', icon: '⚙️', label: 'SOP Management' }, { id: 'user-management', icon: '👥', label: 'User Management' }].map(t => (
+                                    {[{ id: 'campaign-approvals', icon: '✅', label: 'Campaign Approvals' }, { id: 'assets', icon: '📤', label: 'Upload Queue' }, { id: 'strategic', icon: '🗓️', label: 'Strategic View' }, { id: 'sop-management', icon: '⚙️', label: 'SOP Management' }].map(t => (
                                         <a key={t.id} href="#" onClick={(e) => { e.preventDefault(); handleTabSwitch(t.id); }} class={`nav-link flex items-center px-6 py-3 transition-colors ${tab === t.id ? 'bg-[#3498db] font-bold text-white' : 'hover:bg-[#34495e]'}`}>
                                             <span class="mr-3">{t.icon}</span> {t.label}
                                         </a>
@@ -1074,7 +879,7 @@
                     </div>
                     <div class="card-body">
                         <p><strong>📅 Date:</strong> {c.target_date ? new Date(c.target_date).toLocaleDateString() : '—'}</p>
-                        <p><strong>👤 Tutor:</strong> {c.creator_status === 'deleted' ? "[Deleted User]" : (c.created_by_name || 'Unknown')}</p>
+                        <p><strong>👤 Tutor:</strong> {c.created_by_name || 'Unknown'}</p>
                         <p><strong>🎓 Learning Goals:</strong> {c.outcomes || 'Not specified'}</p>
                         {c.trick_pattern && <p><strong>🎯 Exam Pattern:</strong> {c.trick_pattern}</p>}
                     </div>
@@ -1166,7 +971,7 @@
                                                 <p><strong>📅 Date:</strong> {c.target_date ? new Date(c.target_date).toLocaleDateString() : '—'}</p>
                                                 <p><strong>📚 Course:</strong> {c.subject}</p>
                                                 <p><strong>🎯 Topic:</strong> {c.topic}</p>
-                                                <p><strong>👤 Tutor:</strong> {c.creator_status === 'deleted' ? "[Deleted User]" : (c.created_by_name || 'Unknown')}</p>
+                                                <p><strong>👤 Tutor:</strong> {c.created_by_name || 'Unknown'}</p>
                                                 <p><strong>🎓 Learning Goals:</strong> {c.outcomes || 'Not specified'}</p>
                                                 {c.trick_pattern && <p><strong>📝 Exam Pattern:</strong> {c.trick_pattern}</p>}
                                             </div>
@@ -1404,352 +1209,6 @@
             );
         }
 
-        // ── User Management View ─────────────────────────────────────────────
-        function UserManagementView({ user }) {
-            const [activeTab, setActiveTab] = useState('pending');
-            const [users, setUsers] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [rejectModal, setRejectModal] = useState(null); // userId for reject
-            const [rejectReason, setRejectReason] = useState('');
-            const [actionMsg, setActionMsg] = useState('');
-
-            const loadUsers = (status = null) => {
-                setLoading(true);
-                const url = status ? `/api/users?status=${status}` : '/api/users';
-                fetch(url, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } })
-                    .then(r => r.json())
-                    .then(data => { setUsers(data?.users || []); setLoading(false); })
-                    .catch(() => setLoading(false));
-            };
-
-            useEffect(() => {
-                loadUsers(activeTab === 'pending' ? 'pending' : null);
-            }, [activeTab]);
-
-            const showMsg = (msg) => { setActionMsg(msg); setTimeout(() => setActionMsg(''), 3000); };
-
-            const approveUser = (userId) => {
-                fetch(`/api/users/${userId}/approve`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                }).then(r => {
-                    if (!r.ok) throw new Error('Failed');
-                    showMsg('✅ User approved successfully');
-                    loadUsers(activeTab === 'pending' ? 'pending' : null);
-                }).catch(() => showMsg('❌ Failed to approve user'));
-            };
-
-            const submitReject = () => {
-                if (!rejectModal) return;
-                fetch(`/api/users/${rejectModal}/reject`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                    body: JSON.stringify({ reason: rejectReason })
-                }).then(r => {
-                    if (!r.ok) throw new Error('Failed');
-                    showMsg('User rejected');
-                    setRejectModal(null);
-                    setRejectReason('');
-                    loadUsers(activeTab === 'pending' ? 'pending' : null);
-                }).catch(() => showMsg('❌ Failed to reject user'));
-            };
-
-            const [deletionModal, setDeletionModal] = useState(null);
-            const [usageStats, setUsageStats] = useState(null);
-            const [delReason, setDelReason] = useState('');
-            const [confirmName, setConfirmName] = useState('');
-
-            const openDeletionModal = async (targetUser) => {
-                setDeletionModal(targetUser);
-                setUsageStats(null);
-                setDelReason('');
-                setConfirmName('');
-                try {
-                    const response = await fetch(`/api/users/${targetUser.id}/usage`, {
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                    });
-                    const stats = await response.json();
-                    setUsageStats(stats);
-                } catch (err) {
-                    console.error('Failed to load usage stats:', err);
-                }
-            };
-
-            const executeDeletion = async () => {
-                if (confirmName !== deletionModal.name) return;
-                try {
-                    const response = await fetch(`/api/users/${deletionModal.id}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${localStorage.getItem('token')}`
-                        },
-                        body: JSON.stringify({ reason: delReason, confirmName })
-                    });
-                    if (!response.ok) {
-                        const data = await response.json();
-                        throw new Error(data.error || 'Failed to delete account');
-                    }
-                    showMsg(`✅ Account for ${deletionModal.name} successfully deleted`);
-                    setDeletionModal(null);
-                    loadUsers(null);
-                } catch (err) {
-                    alert(err.message);
-                }
-            };
-
-            const changeUserRole = async (userId, newRole, userName) => {
-                if (!confirm(`Change ${userName}'s role to ${newRole.toUpperCase()}?`)) {
-                    loadUsers(null); // Reset dropdown
-                    return;
-                }
-
-                try {
-                    const response = await fetch(`/api/users/${userId}/role`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${localStorage.getItem('token')}`
-                        },
-                        body: JSON.stringify({ role: newRole })
-                    });
-
-                    if (!response.ok) {
-                        const data = await response.json();
-                        throw new Error(data.error || 'Failed to update role');
-                    }
-
-                    showMsg(`✅ Role updated for ${userName}`);
-                    loadUsers(null);
-                } catch (err) {
-                    alert(err.message);
-                    loadUsers(null);
-                }
-            };
-
-            const pendingCount = users.filter(u => u.account_status === 'pending').length;
-
-            const statusBadge = (s) => {
-                const map = { approved: 'bg-green-100 text-green-800', pending: 'bg-yellow-100 text-yellow-800', rejected: 'bg-red-100 text-red-800', deleted: 'bg-gray-100 text-gray-600' };
-                return <span class={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${map[s] || 'bg-gray-100 text-gray-700'}`}>{s}</span>;
-            };
-            const roleBadge = (r) => {
-                const map = { admin: 'bg-red-600', hod: 'bg-blue-600', tutor: 'bg-green-600', content_manager: 'bg-purple-600', marketing: 'bg-orange-500', crm: 'bg-teal-600' };
-                return <span class={`text-[10px] font-bold uppercase px-2 py-0.5 rounded text-white ${map[r] || 'bg-gray-500'}`}>{r}</span>;
-            };
-
-            return (
-                <div class="space-y-6">
-                    {/* Header */}
-                    <div class="flex justify-between items-center">
-                        <p class="text-xs font-bold uppercase text-gray-400 tracking-widest">User Management</p>
-                        <button onClick={() => loadUsers(activeTab === 'pending' ? 'pending' : null)} class="text-xs text-blue-600 underline">↻ Refresh</button>
-                    </div>
-
-                    {/* Action message */}
-                    {actionMsg && <div class="bg-green-100 border border-green-300 text-green-800 text-sm px-4 py-2 rounded">{actionMsg}</div>}
-
-                    {/* Tabs */}
-                    <div class="flex gap-1 border-b border-gray-200">
-                        <button onClick={() => setActiveTab('pending')} class={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'pending' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                            Pending Approvals {pendingCount > 0 && <span class="ml-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pendingCount}</span>}
-                        </button>
-                        <button onClick={() => setActiveTab('all')} class={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'all' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                            All Users
-                        </button>
-                    </div>
-
-                    {/* Content */}
-                    {loading ? (
-                        <div class="text-center py-12 text-gray-400 text-sm">Loading users...</div>
-                    ) : (
-                        <>
-                            {/* PENDING TAB */}
-                            {activeTab === 'pending' && (
-                                <div class="space-y-3">
-                                    {users.length === 0 ? (
-                                        <div class="text-center py-12 text-gray-400 text-sm italic">✅ No pending registrations</div>
-                                    ) : users.map(u => (
-                                        <div key={u.id} class="bg-white border border-gray-200 rounded-lg p-4 flex justify-between items-center shadow-sm">
-                                            <div>
-                                                <p class="font-bold text-sm">{u.name}</p>
-                                                <p class="text-xs text-gray-500 mt-0.5">{u.email}</p>
-                                                {u.subjects && (() => { try { const s = JSON.parse(u.subjects); return <p class="text-xs text-gray-600 mt-1">📚 {s.join(', ')}</p>; } catch { return null; } })()}
-                                                <p class="text-xs text-gray-400 mt-1">Registered: {new Date(u.created_at).toLocaleDateString()}</p>
-                                            </div>
-                                            <div class="flex gap-2">
-                                                <button onClick={() => approveUser(u.id)} class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-4 py-2 rounded transition-colors">✓ Approve</button>
-                                                <button onClick={() => { setRejectModal(u.id); setRejectReason(''); }} class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 py-2 rounded transition-colors">✗ Reject</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* ALL USERS TAB */}
-                            {activeTab === 'all' && (
-                                <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-                                    <table class="w-full text-sm">
-                                        <thead class="bg-gray-50 text-xs uppercase text-gray-500">
-                                            <tr>
-                                                <th class="px-4 py-3 text-left">Name</th>
-                                                <th class="px-4 py-3 text-left">Email</th>
-                                                <th class="px-4 py-3 text-left">Role</th>
-                                                <th class="px-4 py-3 text-left">Status</th>
-                                                <th class="px-4 py-3 text-left">Joined</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="divide-y divide-gray-100">
-                                            {users.length === 0 ? (
-                                                <tr><td colSpan="5" class="px-4 py-8 text-center text-gray-400">No users found</td></tr>
-                                            ) : users.map(u => (
-                                                <tr key={u.id} class={`hover:bg-gray-50 ${u.account_status === 'deleted' ? 'bg-gray-50 opacity-75' : ''}`}>
-                                                    <td class="px-4 py-3 font-medium">
-                                                        {u.name}
-                                                        {u.account_status === 'deleted' && <span class="ml-2 text-[9px] font-bold bg-gray-400 text-white px-1.5 py-0.5 rounded">[DELETED]</span>}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-gray-500">{u.email}</td>
-                                                    <td class="px-4 py-3">
-                                                        <div class="flex items-center gap-2">
-                                                            <select
-                                                                value={u.role}
-                                                                onChange={(e) => changeUserRole(u.id, e.target.value, u.name)}
-                                                                disabled={(String(u.id) === String(user.id) && u.role === 'admin') || u.account_status === 'deleted'}
-                                                                class={`text-[11px] font-bold uppercase px-2 py-1 rounded border outline-none bg-white ${(String(u.id) === String(user.id) && u.role === 'admin') || u.account_status === 'deleted' ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-gray-400'}`}
-                                                            >
-                                                                <option value="tutor">Tutor</option>
-                                                                <option value="hod">HOD</option>
-                                                                <option value="content_manager">Content Manager</option>
-                                                                <option value="marketing">Marketing</option>
-                                                                <option value="crm">CRM</option>
-                                                                <option value="admin">Admin</option>
-                                                            </select>
-                                                            {u.account_status !== 'deleted' && String(u.id) !== String(user.id) && (
-                                                                <button
-                                                                    onClick={() => openDeletionModal(u)}
-                                                                    class="text-red-500 hover:text-red-700 p-1 text-sm bg-gray-100 rounded hover:bg-gray-200 transition-colors"
-                                                                    title="Delete Account"
-                                                                >
-                                                                    🗑️
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td class="px-4 py-3">{statusBadge(u.account_status)}</td>
-                                                    <td class="px-4 py-3 text-gray-400">{new Date(u.created_at).toLocaleDateString()}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {/* Reject Modal */}
-                    {rejectModal && (
-                        <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                            <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
-                                <h3 class="text-base font-bold mb-4">Reject Registration</h3>
-                                <p class="text-sm text-gray-600 mb-3">Provide a reason (optional — will be sent to the user):</p>
-                                <textarea
-                                    value={rejectReason}
-                                    onChange={e => setRejectReason(e.target.value)}
-                                    rows="3"
-                                    class="w-full border border-gray-300 rounded p-2 text-sm focus:border-red-400 outline-none"
-                                    placeholder="e.g. Incomplete application, duplicate account..."
-                                />
-                                <div class="flex gap-3 mt-4 justify-end">
-                                    <button onClick={() => setRejectModal(null)} class="px-4 py-2 text-sm border rounded hover:bg-gray-50">Cancel</button>
-                                    <button onClick={submitReject} class="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700">Confirm Reject</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Account Deletion Modal */}
-                    {deletionModal && (
-                        <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-                                <div class="bg-red-600 px-6 py-4 flex items-center gap-3">
-                                    <span class="text-2xl">⚠️</span>
-                                    <h3 class="text-white font-bold text-lg">Delete User Account</h3>
-                                </div>
-                                <div class="p-6 space-y-4">
-                                    <p class="text-sm text-gray-600 font-medium">
-                                        This action **cannot be undone**. The user will be immediately logged out and blocked from the system.
-                                    </p>
-
-                                    {/* Usage Stats */}
-                                    <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">User Activity Summary</p>
-                                        {!usageStats ? (
-                                            <div class="text-xs text-gray-400 animate-pulse">Fetching records...</div>
-                                        ) : (
-                                            <div class="grid grid-cols-3 gap-2">
-                                                <div class="text-center">
-                                                    <p class="text-lg font-black text-gray-800">{usageStats.campaigns}</p>
-                                                    <p class="text-[9px] text-gray-400 uppercase font-bold">Campaigns</p>
-                                                </div>
-                                                <div class="text-center">
-                                                    <p class="text-lg font-black text-gray-800">{usageStats.assets}</p>
-                                                    <p class="text-[9px] text-gray-400 uppercase font-bold">Assets</p>
-                                                </div>
-                                                <div class="text-center">
-                                                    <p class="text-lg font-black text-gray-800">{usageStats.sessions}</p>
-                                                    <p class="text-[9px] text-gray-400 uppercase font-bold">Sessions</p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1.5">Deletion Reason (Optional)</label>
-                                        <textarea
-                                            value={delReason}
-                                            onChange={e => setDelReason(e.target.value)}
-                                            rows="2"
-                                            class="w-full border border-gray-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-red-100 focus:border-red-400 outline-none transition-all"
-                                            placeholder="e.g. End of contract, security breach..."
-                                        />
-                                    </div>
-
-                                    <div class="pt-2">
-                                        <label class="block text-xs font-bold text-gray-700 mb-2 whitespace-pre-wrap">
-                                            Type <span class="text-red-600 font-black">{deletionModal.name}</span> to confirm (case-sensitive)
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={confirmName}
-                                            onChange={e => setConfirmName(e.target.value)}
-                                            class={`w-full border-2 p-2.5 rounded-lg text-sm font-medium transition-all outline-none ${confirmName === deletionModal.name ? 'border-green-500 bg-green-50' : 'border-gray-200 focus:border-red-400'}`}
-                                            placeholder="Type name here..."
-                                        />
-                                    </div>
-                                </div>
-
-                                <div class="bg-gray-50 px-6 py-4 flex gap-3 justify-end border-t border-gray-100">
-                                    <button
-                                        onClick={() => setDeletionModal(null)}
-                                        class="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-700"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={executeDeletion}
-                                        disabled={confirmName !== deletionModal.name}
-                                        class={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-lg transition-all ${confirmName === deletionModal.name ? 'bg-red-600 hover:bg-red-700 hover:shadow-red-200 active:scale-95' : 'bg-gray-300 cursor-not-allowed'}`}
-                                    >
-                                        DELETE ACCOUNT
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
         // ── Inbox View (Week 5) ───────────────────────────────────────────────
         function InboxView({ user }) {
             const [notifs, setNotifs] = useState([]);
@@ -1785,50 +1244,12 @@
             const [cmTab, setCmTab] = useState('free');
             const load = () => { api.getAssets().then(d => setAllAssets(d.assets)); };
             useEffect(load, []);
-            const publish = (id) => api.publishAsset(id).then(() => { showToast('Asset published'); load(); }).catch(e => alert(e.message));
+            const publish = (id) => api.publishAsset(id).then(load).catch(e => alert(e.message));
             const requestRevision = (asset) => {
                 const reason = prompt(`Request revision for "${asset.topic}"\n\nReason for revision:`);
                 if (!reason) return;
                 api.requestRevision(asset.id, reason).then(load).catch(e => alert(e.message));
             };
-
-            let currentRejectingAssetId = null;
-
-            const rejectAsset = async (assetId) => {
-                currentRejectingAssetId = assetId;
-                document.getElementById('rejection-reason').value = '';
-                document.getElementById('asset-rejection-modal').style.display = 'flex';
-            };
-
-            const closeAssetRejectionModal = () => {
-                document.getElementById('asset-rejection-modal').style.display = 'none';
-                currentRejectingAssetId = null;
-            };
-
-            const confirmAssetRejection = async () => {
-                const reason = document.getElementById('rejection-reason').value.trim();
-
-                if (!reason) {
-                    alert('Please provide a rejection reason');
-                    return;
-                }
-
-                if (!currentRejectingAssetId) {
-                    alert('Error: No asset selected');
-                    return;
-                }
-
-                try {
-                    await api.updateAsset(currentRejectingAssetId, 'rejected', reason);
-                    closeAssetRejectionModal();
-                    showToast('Asset rejected');
-                    load();
-                } catch (err) {
-                    console.error('Error rejecting asset:', err);
-                    alert('Failed to reject asset');
-                }
-            };
-
 
             const freeAssets = allAssets.filter(a => a.asset_category === 'free_asset');
             const hubAssets = allAssets.filter(a => a.asset_category === 'hub_asset');
@@ -1915,28 +1336,7 @@
                                     )}
 
                                     {(a.status === 'pending_cm' || a.status === 'approved') && (
-                                        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                            <button
-                                                onClick={() => api.updateAsset(a.id, 'approved', '').then(() => { showToast('Asset approved'); load(); })}
-                                                class="bg-green-600 hover:bg-green-700 text-white"
-                                                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                                ✓ Approve
-                                            </button>
-
-                                            <button
-                                                onClick={() => publish(a.id)}
-                                                class="bg-blue-600 hover:bg-blue-700 text-white"
-                                                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                                📚 Publish to Hub
-                                            </button>
-
-                                            <button
-                                                onClick={() => rejectAsset(a.id)}
-                                                class="bg-red-600 hover:bg-red-700 text-white"
-                                                style={{ padding: '6px 12px', fontSize: '13px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                                ✗ Reject
-                                            </button>
-                                        </div>
+                                        <button onClick={() => publish(a.id)} class="mt-4 bg-green-600 text-white px-4 py-2 rounded text-xs font-bold uppercase hover:bg-green-700">Approve & Publish to Hub</button>
                                     )}
                                     {a.status === 'published' && <p class="text-[10px] text-green-600 mt-4 font-bold uppercase tracking-widest">✓ Published {new Date(a.published_at).toLocaleDateString()}</p>}
                                 </div>
@@ -1944,48 +1344,6 @@
                             {hubAssets.length === 0 && <div class="py-12 text-center border-2 border-dashed rounded-xl text-gray-400 italic text-sm">No hub assets to publish.</div>}
                         </div>
                     )}
-
-                    {/* Asset Rejection Modal */}
-                    <div id="asset-rejection-modal" class="modal" style={{ display: 'none' }}>
-                        <div class="modal-content" style={{ maxWidth: '500px' }}>
-                            <div class="modal-header">
-                                <h2>Reject Asset</h2>
-                                <button class="close-modal" onClick={closeAssetRejectionModal}>×</button>
-                            </div>
-
-                            <div class="modal-body">
-                                <p style={{ marginBottom: '15px', color: '#6c757d' }}>
-                                    Please provide a reason for rejecting this asset. This will be sent to the tutor.
-                                </p>
-
-                                <label htmlFor="rejection-reason" style={{ display: 'block', marginBottom: '5px', fontWeight: 500 }}>
-                                    Rejection Reason: *
-                                </label>
-                                <textarea
-                                    id="rejection-reason"
-                                    rows="4"
-                                    placeholder="Enter reason for rejection..."
-                                    style={{ width: '100%', padding: '10px', border: '1px solid #dee2e6', borderRadius: '4px', fontSize: '14px', fontFamily: 'inherit' }}>
-                                </textarea>
-                            </div>
-
-                            <div class="modal-footer">
-                                <button
-                                    class="bg-gray-200 text-gray-800 hover:bg-gray-300"
-                                    onClick={closeAssetRejectionModal}
-                                    style={{ marginRight: '10px', padding: '8px 16px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                    Cancel
-                                </button>
-                                <button
-                                    class="bg-red-600 text-white hover:bg-red-700"
-                                    onClick={confirmAssetRejection}
-                                    id="confirm-rejection-btn"
-                                    style={{ padding: '8px 16px', borderRadius: '4px', fontWeight: 'bold' }}>
-                                    ✗ Reject Asset
-                                </button>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             );
         }
@@ -2102,7 +1460,7 @@
                             <div>
                                 <p class="text-xs font-bold text-gray-400 uppercase mb-1">{campaign.subject}</p>
                                 <h3 class="text-lg font-bold">{campaign.topic}</h3>
-                                <p class="text-xs text-gray-400">By {campaign.creator_status === 'deleted' ? "[Deleted User]" : campaign.tutor_name} · Target: {campaign.target_date || 'TBD'}</p>
+                                <p class="text-xs text-gray-400">By {campaign.tutor_name} · Target: {campaign.target_date || 'TBD'}</p>
                             </div>
                         </div>
                         <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{campaign.status.replace('_', ' ')}</span>
@@ -2463,7 +1821,7 @@
                         <div>
                             <p class="text-xs font-bold text-gray-400 uppercase mb-1">{asset.subject} · {asset.asset_type}</p>
                             <h3 class="text-lg font-bold">{asset.topic}</h3>
-                            <p class="text-xs text-gray-400">By {asset.creator_status === 'deleted' ? "[Deleted User]" : asset.tutor_name}</p>
+                            <p class="text-xs text-gray-400">By {asset.tutor_name}</p>
                         </div>
                         <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{asset.status.replace('_', ' ')}</span>
                     </div>
@@ -2518,7 +1876,6 @@
                                     <div>
                                         <h4 class="font-bold text-sm">{m.subject} — {m.type.toUpperCase()}</h4>
                                         <p class="text-[10px] text-gray-500">{m.institution} • {m.campaign_window || 'No Window'}</p>
-                                        <p class="text-[10px] text-gray-400 mt-1">By {m.creator_status === 'deleted' ? "[Deleted User]" : (m.creator_name || 'System')}</p>
                                     </div>
                                     <div class="text-right">
                                         <p class="text-xs font-bold">{new Date(m.date).toLocaleDateString()}</p>
@@ -2595,7 +1952,6 @@
                             <span class={`text-[9px] font-black uppercase px-2 py-0.5 rounded mr-2 ${s.status === 'completed' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>{s.status}</span>
                             <h4 class="inline-block font-bold text-base">{s.subject}</h4>
                             <p class="text-xs text-gray-500">Assessment: {s.assessment_date ? new Date(s.assessment_date).toLocaleDateString() : 'None'}</p>
-                            <p class="text-[10px] text-gray-400 mt-1">Scheduled by: {s.creator_status === 'deleted' ? "[Deleted User]" : (s.created_by_name || 'Unknown')}</p>
                         </div>
                         <div class="text-right">
                             <p class="text-xs font-bold">Session: {new Date(s.session_date).toLocaleDateString()}</p>

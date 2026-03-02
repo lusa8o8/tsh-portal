@@ -1,8 +1,10 @@
 [
-  "users",
   "notifications",
   "hub_assets",
-  "assessments",
   "support_sessions",
-  "campaigns"
+  "sop_links",
+  "campaigns_backup",
+  "users",
+  "campaigns",
+  "assessments"
 ]

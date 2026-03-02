@@ -63,20 +63,8 @@ const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'No token provided' });
-    jwt.verify(token, JWT_SECRET, async (err, user) => {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
         if (err) return res.status(403).json({ error: 'Invalid token' });
-
-        // Block deleted users
-        try {
-            const result = await pool.query('SELECT account_status FROM users WHERE id = $1', [user.id]);
-            if (result.rows.length === 0 || result.rows[0].account_status === 'deleted') {
-                return res.status(403).json({ error: 'Account has been deleted' });
-            }
-        } catch (dbErr) {
-            console.error('Auth verification error:', dbErr);
-            return res.status(500).json({ error: 'Server error' });
-        }
-
         req.user = user;
         next();
     });
@@ -245,7 +233,7 @@ app.get('/api/users', authenticateToken, requireRole('admin'), async (req, res) 
 
         query += ' ORDER BY created_at DESC';
         const result = await pool.query(query, params);
-        res.json({ users: result.rows });
+        res.json(result.rows);
     } catch (err) {
         console.error('Error fetching users:', err);
         res.status(500).json({ error: 'Failed to fetch users' });
@@ -326,117 +314,6 @@ app.patch('/api/users/:id/reject', authenticateToken, requireRole('admin'), asyn
     }
 });
 
-// Change user role (Admin only)
-app.patch('/api/users/:id/role', authenticateToken, requireRole('admin'), async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { role } = req.body;
-
-        // Validate role
-        const validRoles = ['tutor', 'hod', 'content_manager', 'marketing', 'crm', 'admin'];
-        if (!validRoles.includes(role)) {
-            return res.status(400).json({ error: 'Invalid role' });
-        }
-
-        // Prevent self-demotion from admin
-        if (req.user.id == id && req.user.role === 'admin' && role !== 'admin') {
-            return res.status(403).json({ error: 'Cannot demote yourself from admin' });
-        }
-
-        // Update role
-        const result = await pool.query(
-            'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, role, name, email',
-            [role, id]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const user = result.rows[0];
-
-        // Notify user of role change
-        await pool.query(
-            `INSERT INTO notifications (user_id, message, recipient_role)
-             VALUES ($1, $2, $3)`,
-            [
-                id,
-                `Your role has been updated to ${role.toUpperCase()}`,
-                role
-            ]
-        );
-
-        res.json({
-            message: 'Role updated successfully',
-            user: { id, role, name: user.name }
-        });
-
-    } catch (err) {
-        console.error('Error updating role:', err);
-        res.status(500).json({ error: 'Failed to update role' });
-    }
-});
-
-// GET user usage stats (Admin only)
-app.get('/api/users/:id/usage', authenticateToken, requireRole('admin'), async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        const campaignsCount = await pool.query('SELECT COUNT(*) FROM campaigns WHERE tutor_id = $1', [id]);
-        const assetsCount = await pool.query('SELECT COUNT(*) FROM hub_assets WHERE tutor_id = $1', [id]);
-        const sessionsCount = await pool.query('SELECT COUNT(*) FROM support_sessions WHERE scheduled_by = $1', [id]);
-
-        res.json({
-            campaigns: parseInt(campaignsCount.rows[0].count),
-            assets: parseInt(assetsCount.rows[0].count),
-            sessions: parseInt(sessionsCount.rows[0].count)
-        });
-    } catch (err) {
-        console.error('Usage stats error:', err);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-// Soft Delete User (Admin only)
-app.delete('/api/users/:id', authenticateToken, requireRole('admin'), async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { reason, confirmName } = req.body;
-
-        // 1. Target user exists and name matches exactly
-        const userResult = await pool.query('SELECT name FROM users WHERE id = $1', [id]);
-        if (userResult.rows.length === 0) {
-            return res.status(400).json({ error: 'Target user not found' });
-        }
-
-        const targetUser = userResult.rows[0];
-        if (targetUser.name !== confirmName) {
-            return res.status(400).json({ error: 'Confirmation name does not match exactly' });
-        }
-
-        // 2. Prevent self-deletion
-        if (req.user.id == id) {
-            return res.status(400).json({ error: 'You cannot delete your own account' });
-        }
-
-        // 3. Perform Soft Delete
-        await pool.query(
-            `UPDATE users 
-             SET account_status = 'deleted',
-                 deleted_at = NOW(),
-                 deleted_by = $1,
-                 deletion_reason = $2
-             WHERE id = $3`,
-            [req.user.id, reason, id]
-        );
-
-        res.json({ message: 'Account successfully deleted' });
-    } catch (err) {
-        console.error('Account deletion error:', err);
-        res.status(500).json({ error: 'Failed to delete account' });
-    }
-});
-
 app.post('/api/auth/login', async (req, res) => {
     try {
         const error = validateInput(req.body, ['email', 'password']);
@@ -448,11 +325,6 @@ app.post('/api/auth/login', async (req, res) => {
         const user = result.rows[0];
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-
-        if (user.account_status === 'deleted') {
-            return res.status(403).json({ error: 'Account has been deleted' });
-        }
-
         const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
     } catch (error) {
@@ -534,7 +406,7 @@ app.get('/api/campaigns', authenticateToken, async (req, res) => {
         const { status } = req.query;
 
         let query = `
-            SELECT c.*, u.name as created_by_name, u.role as creator_role, u.account_status as creator_status 
+            SELECT c.*, u.name as created_by_name, u.role as creator_role 
             FROM campaigns c 
             JOIN users u ON c.tutor_id = u.id 
             WHERE 1=1
@@ -726,7 +598,7 @@ app.get('/api/assets', authenticateToken, async (req, res) => {
         const { status, category } = req.query;
 
         let query = `
-            SELECT a.*, u.name as tutor_name, u.role as uploader_role, u.account_status as creator_status 
+            SELECT a.*, u.name as tutor_name, u.role as uploader_role 
             FROM hub_assets a 
             JOIN users u ON a.tutor_id = u.id 
             WHERE 1=1
@@ -880,10 +752,10 @@ app.patch('/api/assets/:id/publish', authenticateToken, requireRole('content_man
 app.get('/api/assets/free-content', authenticateToken, requireRole('content_manager', 'admin'), async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT a.*, u.name as tutor_name, u.account_status as creator_status
-             FROM hub_assets a
-             JOIN users u ON a.tutor_id = u.id
-             WHERE a.asset_category = 'free_asset'
+            `SELECT a.*, u.name as tutor_name 
+             FROM hub_assets a 
+             JOIN users u ON a.tutor_id = u.id 
+             WHERE a.asset_category = 'free_asset' 
              ORDER BY a.created_at DESC`
         );
         res.json({ assets: result.rows });
@@ -896,7 +768,7 @@ app.get('/api/assets/free-content', authenticateToken, requireRole('content_mana
 app.get('/api/hub/inventory', authenticateToken, async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT a.*, u.name as tutor_name, u.account_status as creator_status 
+            `SELECT a.*, u.name as tutor_name 
              FROM hub_assets a 
              JOIN users u ON a.tutor_id = u.id 
              WHERE a.status = 'published' 
@@ -936,12 +808,7 @@ app.post('/api/assessments', authenticateToken, requireRole('hod', 'tutor', 'adm
 // GET /api/assessments - List all assessments
 app.get('/api/assessments', authenticateToken, async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT a.*, u.name as creator_name, u.account_status as creator_status 
-            FROM assessments a 
-            LEFT JOIN users u ON a.created_by = u.id 
-            ORDER BY a.date ASC
-        `);
+        const result = await pool.query('SELECT * FROM assessments ORDER BY date ASC');
         res.json({ assessments: result.rows });
     } catch (error) {
         res.status(500).json({ error: 'Server error' });
@@ -974,7 +841,7 @@ app.get('/api/support_sessions', authenticateToken, async (req, res) => {
         const { upcoming, status } = req.query;
 
         let query = `
-            SELECT ss.*, u.name as created_by_name, u.role as creator_role, u.account_status as creator_status 
+            SELECT ss.*, u.name as created_by_name, u.role as creator_role 
             FROM support_sessions ss 
             JOIN users u ON ss.scheduled_by = u.id 
             WHERE 1=1
