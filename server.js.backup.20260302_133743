@@ -327,47 +327,72 @@ app.patch('/api/users/:id/reject', authenticateToken, requireRole('admin', 'hod'
 });
 
 // Change user role (Admin only)
-// Update user role (Admin and HOD)
 app.patch('/api/users/:id/role', authenticateToken, requireRole('admin', 'hod'), async (req, res) => {
+    console.log('========================================');
+    console.log('ROLE UPDATE REQUEST RECEIVED');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Requesting User ID:', req.user.id);
+    console.log('Requesting User Role:', req.user.role);
+    console.log('Target User ID (params):', req.params.id);
+    console.log('New Role (body):', req.body.role);
+    console.log('========================================');
+
     try {
         const { id } = req.params;
         const { role } = req.body;
 
+        console.log('Validation: Role value:', role);
+
         // Validate role
         const validRoles = ['tutor', 'hod', 'content_manager', 'marketing', 'crm', 'admin'];
         if (!validRoles.includes(role)) {
+            console.log('VALIDATION FAILED: Invalid role');
             return res.status(400).json({ error: 'Invalid role' });
         }
 
+        console.log('Validation: PASSED');
+
         // Prevent self-demotion from admin
         if (req.user.id == id && req.user.role === 'admin' && role !== 'admin') {
+            console.log('BLOCKED: Self-demotion attempt');
             return res.status(403).json({ error: 'Cannot demote yourself from admin' });
         }
 
-        // Update role in database
-        await pool.query(
-            'UPDATE users SET role = $1 WHERE id = $2',
+        console.log('Executing UPDATE query...');
+        console.log('Query params:', [role, id]);
+
+        // Update role
+        const result = await pool.query(
+            'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, role, name, email',
             [role, id]
         );
 
-        // Get user details for notification
-        const userResult = await pool.query(
-            'SELECT name, email FROM users WHERE id = $1',
-            [id]
-        );
+        console.log('UPDATE query completed');
+        console.log('Rows affected:', result.rowCount);
 
-        if (userResult.rows.length === 0) {
+        if (result.rows.length === 0) {
+            console.log('ERROR: User not found in database');
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const user = userResult.rows[0];
+        const user = result.rows[0];
+        console.log('Updated user:', user);
 
-        // Create notification for the user
+        console.log('Creating notification...');
+
+        // Notify user of role change
         await pool.query(
-            `INSERT INTO notifications (user_id, title, message, created_at)
-             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)`,
-            [id, 'Role Updated', `Your role has been changed to ${role.toUpperCase()}`]
+            `INSERT INTO notifications (user_id, message, recipient_role)
+             VALUES ($1, $2, $3)`,
+            [
+                id,
+                `Your role has been updated to ${role.toUpperCase()}`,
+                role
+            ]
         );
+
+        console.log('SUCCESS: Role updated and notification sent');
+        console.log('========================================\n');
 
         res.json({
             message: 'Role updated successfully',
@@ -375,7 +400,8 @@ app.patch('/api/users/:id/role', authenticateToken, requireRole('admin', 'hod'),
         });
 
     } catch (err) {
-        console.error('Error updating role:', err);
+        console.error('ERROR in role update endpoint:', err);
+        console.log('========================================\n');
         res.status(500).json({ error: 'Server error' });
     }
 });
