@@ -16,6 +16,62 @@ const pool = new Pool({
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+// Soft Delete Migration
+async function runSoftDeleteMigration() {
+    try {
+        console.log('🔄 Running soft delete migration...');
+
+        // Check if migration already ran (idempotency check)
+        const checkResult = await pool.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'campaigns' 
+              AND column_name = 'deleted_at'
+        `);
+
+        if (checkResult.rows.length > 0) {
+            console.log('✅ Soft delete migration already applied');
+            return;
+        }
+
+        // Run migration script
+        await pool.query(`
+            -- 1. Add soft delete columns to campaigns
+            ALTER TABLE campaigns 
+            ADD COLUMN deleted_at TIMESTAMP NULL,
+            ADD COLUMN deleted_by UUID REFERENCES users(id);
+
+            -- 2. Add soft delete columns to assessments
+            ALTER TABLE assessments 
+            ADD COLUMN deleted_at TIMESTAMP NULL,
+            ADD COLUMN deleted_by UUID REFERENCES users(id);
+
+            -- 3. Create deletion log table
+            CREATE TABLE IF NOT EXISTS deletion_log (
+                id SERIAL PRIMARY KEY,
+                entity_type VARCHAR(50) NOT NULL,
+                entity_id UUID NOT NULL,
+                entity_title VARCHAR(255),
+                deleted_by UUID NOT NULL REFERENCES users(id),
+                deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reason TEXT NOT NULL,
+                entity_data JSONB
+            );
+
+            -- 4. Create indexes for performance
+            CREATE INDEX idx_campaigns_deleted_at ON campaigns(deleted_at);
+            CREATE INDEX idx_assessments_deleted_at ON assessments(deleted_at);
+            CREATE INDEX idx_deletion_log_entity ON deletion_log(entity_type, entity_id);
+            CREATE INDEX idx_deletion_log_deleted_by ON deletion_log(deleted_by);
+        `);
+
+        console.log('✅ Soft delete migration completed successfully');
+    } catch (err) {
+        console.error('❌ Migration failed:', err);
+        throw err;
+    }
+}
+
 app.use(cors({
     origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
@@ -385,7 +441,7 @@ app.get('/api/users/:id/usage', authenticateToken, requireRole('admin', 'hod'), 
     try {
         const { id } = req.params;
 
-        const campaignsCount = await pool.query('SELECT COUNT(*) FROM campaigns WHERE tutor_id = $1', [id]);
+        const campaignsCount = await pool.query('SELECT COUNT(*) FROM campaigns WHERE tutor_id = $1 AND deleted_at IS NULL', [id]);
         const assetsCount = await pool.query('SELECT COUNT(*) FROM hub_assets WHERE tutor_id = $1', [id]);
         const sessionsCount = await pool.query('SELECT COUNT(*) FROM support_sessions WHERE scheduled_by = $1', [id]);
 
@@ -540,7 +596,7 @@ app.get('/api/campaigns', authenticateToken, async (req, res) => {
             SELECT c.*, u.name as created_by_name, u.role as creator_role, u.account_status as creator_status 
             FROM campaigns c 
             JOIN users u ON c.tutor_id = u.id 
-            WHERE 1=1
+            WHERE c.deleted_at IS NULL
         `;
         let params = [];
         let paramCount = 1;
@@ -624,6 +680,64 @@ app.patch('/api/campaigns/:id/outcome', authenticateToken, requireRole('tutor', 
     } catch (error) {
         console.error('Error logging campaign outcome:', error);
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Soft delete campaign (HOD/Admin only)
+app.patch('/api/campaigns/:id/soft-delete', authenticateToken, requireRole('hod', 'admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const userId = req.user.id; // Using .id per existing codebase pattern
+
+        // Validate reason
+        if (!reason || reason.trim().length === 0) {
+            return res.status(400).json({ error: 'Deletion reason is required' });
+        }
+
+        // Get campaign details before deletion (for audit log)
+        const campaignResult = await pool.query(
+            'SELECT * FROM campaigns WHERE id = $1 AND deleted_at IS NULL',
+            [id]
+        );
+
+        if (campaignResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Campaign not found or already deleted' });
+        }
+
+        const campaign = campaignResult.rows[0];
+
+        // Soft delete the campaign
+        await pool.query(
+            `UPDATE campaigns 
+             SET deleted_at = CURRENT_TIMESTAMP, 
+                 deleted_by = $1 
+             WHERE id = $2`,
+            [userId, id]
+        );
+
+        // Log the deletion
+        await pool.query(
+            `INSERT INTO deletion_log 
+             (entity_type, entity_id, entity_title, deleted_by, reason, entity_data)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+                'campaign',
+                id,
+                campaign.topic, // Pattern in campaign table uses 'topic' for title
+                userId,
+                reason.trim(),
+                JSON.stringify(campaign) // Store snapshot
+            ]
+        );
+
+        res.json({
+            message: 'Campaign soft-deleted successfully',
+            id: id
+        });
+    } catch (err) {
+        console.error('Error soft-deleting campaign:', err);
+        res.status(500).json({ error: 'Failed to delete campaign' });
     }
 });
 
@@ -943,11 +1057,70 @@ app.get('/api/assessments', authenticateToken, async (req, res) => {
             SELECT a.*, u.name as creator_name, u.account_status as creator_status 
             FROM assessments a 
             LEFT JOIN users u ON a.created_by = u.id 
+            WHERE a.deleted_at IS NULL
             ORDER BY a.date ASC
         `);
         res.json({ assessments: result.rows });
     } catch (error) {
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Soft delete assessment (HOD/Admin only)
+app.patch('/api/assessments/:id/soft-delete', authenticateToken, requireRole('hod', 'admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body;
+        const userId = req.user.id; // Using .id per existing codebase pattern
+
+        // Validate reason
+        if (!reason || reason.trim().length === 0) {
+            return res.status(400).json({ error: 'Deletion reason is required' });
+        }
+
+        // Get assessment details before deletion (for audit log)
+        const assessmentResult = await pool.query(
+            'SELECT * FROM assessments WHERE id = $1 AND deleted_at IS NULL',
+            [id]
+        );
+
+        if (assessmentResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Assessment found or already deleted' });
+        }
+
+        const assessment = assessmentResult.rows[0];
+
+        // Soft delete the assessment
+        await pool.query(
+            `UPDATE assessments 
+             SET deleted_at = CURRENT_TIMESTAMP, 
+                 deleted_by = $1 
+             WHERE id = $2`,
+            [userId, id]
+        );
+
+        // Log the deletion
+        await pool.query(
+            `INSERT INTO deletion_log 
+             (entity_type, entity_id, entity_title, deleted_by, reason, entity_data)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+                'assessment',
+                id,
+                assessment.subject, // Assessment table uses 'subject' as identifier
+                userId,
+                reason.trim(),
+                JSON.stringify(assessment) // Store snapshot
+            ]
+        );
+
+        res.json({
+            message: 'Assessment soft-deleted successfully',
+            id: id
+        });
+    } catch (err) {
+        console.error('Error soft-deleting assessment:', err);
+        res.status(500).json({ error: 'Failed to delete assessment' });
     }
 });
 
@@ -1304,14 +1477,14 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
         const counts = {};
 
         if (role === 'tutor') {
-            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE tutor_id = $1 AND status = 'pending_approval'`, [req.user.id]);
+            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE tutor_id = $1 AND status = 'pending_approval' AND deleted_at IS NULL`, [req.user.id]);
             const assets = await pool.query(`SELECT COUNT(*) FROM hub_assets WHERE tutor_id = $1 AND status = 'pending_hod'`, [req.user.id]);
             const sessions = await pool.query(`SELECT COUNT(*) FROM support_sessions WHERE scheduled_by = $1 AND status = 'scheduled'`, [req.user.id]);
             counts.pending_campaigns = parseInt(campaigns.rows[0].count);
             counts.pending_assets = parseInt(assets.rows[0].count);
             counts.upcoming_sessions = parseInt(sessions.rows[0].count);
         } else if (role === 'hod' || role === 'admin') {
-            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE status = 'pending_approval'`);
+            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE status = 'pending_approval' AND deleted_at IS NULL`);
             const assets = await pool.query(`SELECT COUNT(*) FROM hub_assets WHERE status = 'pending_hod'`);
             const gaps = await pool.query(`SELECT COUNT(*) FROM support_sessions WHERE status = 'completed' AND detected_gaps IS NOT NULL AND detected_gaps != ''`);
             counts.pending_campaign_approvals = parseInt(campaigns.rows[0].count);
@@ -1321,7 +1494,7 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
             const assets = await pool.query(`SELECT COUNT(*) FROM hub_assets WHERE status IN ('approved', 'pending_cm')`);
             counts.assets_to_publish = parseInt(assets.rows[0].count);
         } else if (role === 'marketing' || role === 'crm') {
-            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE status = 'approved'`);
+            const campaigns = await pool.query(`SELECT COUNT(*) FROM campaigns WHERE status = 'approved' AND deleted_at IS NULL`);
             counts.approved_campaigns_ready = parseInt(campaigns.rows[0].count);
         }
 
@@ -1334,4 +1507,8 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 3005;
+
+// Run migration on startup
+runSoftDeleteMigration().catch(console.error);
+
 app.listen(PORT, () => console.log(`🚀 TSH PORTAL Backend (Week 4) running on port ${PORT}`));
