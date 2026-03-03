@@ -480,7 +480,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 app.post('/api/campaigns', authenticateToken, requireRole('tutor', 'hod', 'admin'), async (req, res) => {
     try {
-        const { subject, topic, trick_pattern, outcomes, target_date, target_time } = req.body;
+        const { subject, topic, trick_pattern, outcomes, target_date, target_time, class_link } = req.body;
         if (!subject || !topic) return res.status(400).json({ error: 'Subject and topic required' });
 
         const userId = req.user.id;
@@ -498,9 +498,9 @@ app.post('/api/campaigns', authenticateToken, requireRole('tutor', 'hod', 'admin
         }
 
         const result = await pool.query(
-            `INSERT INTO campaigns (tutor_id, subject, topic, trick_pattern, outcomes, target_date, target_time, status, hod_approved_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [userId, subject, topic, trick_pattern, outcomes, target_date, target_time || null, initialStatus, approvedAt]
+            `INSERT INTO campaigns (tutor_id, subject, topic, trick_pattern, outcomes, target_date, target_time, class_link, status, hod_approved_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [userId, subject, topic, trick_pattern, outcomes, target_date, target_time || null, class_link || null, initialStatus, approvedAt]
         );
         const campaign = result.rows[0];
 
