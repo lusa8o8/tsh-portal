@@ -3059,6 +3059,13 @@
                                                 <div class="text-[10px] text-blue-600 font-medium opacity-75">
                                                     📅 {new Date(c.target_date).toLocaleDateString()} {c.target_time ? `@ ${c.target_time}` : ''}
                                                 </div>
+                                                {c.class_link && (
+                                                    <div class="mt-1 text-[10px] text-blue-700">
+                                                        <strong>🔗 Link:</strong> <a href={c.class_link.startsWith('http') ? c.class_link : `https://${c.class_link}`} target="_blank" rel="noopener noreferrer" class="underline hover:no-underline">
+                                                            {c.class_link}
+                                                        </a>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                         {campaigns.filter(c => getMonthKey(c.target_date) === month).length === 0 && (
