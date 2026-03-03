@@ -354,8 +354,8 @@
 
         const { useState, useEffect } = React;
         const API_URL = window.location.hostname === 'localhost'
-            ? 'http://localhost:3005'
-            : '';  // Use Nginx reverse proxy
+            ? 'http://localhost:3005/api'
+            : '/api';  // Use Nginx reverse proxy
 
         const CustomConfirm = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Confirm', cancelText = 'Cancel' }) => {
             if (!isOpen) return null;
