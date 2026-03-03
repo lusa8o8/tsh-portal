@@ -60,12 +60,15 @@
         }
 
         .badge-paid {
-            background: #fff3e0;
-            color: #f57c00;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            border: 1px solid #bbdefb;
+            letter-spacing: 0.5px;
         }
 
         .card-body p {
@@ -619,7 +622,7 @@
                 { id: 'overview', icon: '📊', label: 'Overview', roles: ['tutor', 'hod', 'admin', 'content_manager', 'marketing', 'crm'] },
                 { id: 'inbox', icon: '📬', label: 'Inbox', roles: ['tutor', 'hod', 'admin', 'content_manager', 'marketing', 'crm'] },
                 { id: 'queue', icon: '📦', label: 'Asset Queue', roles: ['content_manager'] },
-                { id: 'campaigns', icon: user.role === 'marketing' ? '📢' : '✅', label: (user.role === 'hod' || user.role === 'admin') ? 'Campaign Approvals' : 'Campaigns', roles: ['tutor', 'hod', 'admin', 'marketing', 'crm'] },
+                { id: 'campaigns', icon: user.role === 'marketing' ? '📢' : '✅', label: (user.role === 'hod' || user.role === 'admin') ? 'Campaign Approvals' : 'Campaigns', roles: ['tutor', 'hod', 'admin', 'marketing', 'crm', 'content_manager'] },
                 { id: 'assets', icon: '📤', label: 'Upload Queue', roles: ['tutor', 'admin'] },
                 { id: 'assessments', icon: '📋', label: 'Assessment Map', roles: ['tutor', 'hod', 'admin'] },
                 { id: 'sessions', icon: '🎯', label: 'Support Sessions', roles: ['tutor', 'hod', 'admin'] },
@@ -636,7 +639,7 @@
                     {tab === 'overview' && <RoleDashboard user={user} />}
                     {tab === 'inbox' && <InboxView user={user} />}
                     {tab === 'queue' && <ContentManagerQueue user={user} />}
-                    {tab === 'campaigns' && (user.role === 'crm' ? <CampaignCoordination user={user} /> : user.role === 'marketing' ? <MarketingCampaigns user={user} /> : <CampaignView user={user} viewMode="my" />)}
+                    {tab === 'campaigns' && (user.role === 'crm' ? <CampaignCoordination user={user} /> : (user.role === 'marketing' || user.role === 'content_manager') ? <MarketingCampaigns user={user} /> : <CampaignView user={user} viewMode="my" />)}
                     {tab === 'campaign-approvals' && <CampaignView user={user} viewMode="approvals" />}
                     {tab === 'assets' && <AssetView user={user} />}
                     {tab === 'assessments' && <AssessmentMap user={user} />}
@@ -1127,15 +1130,18 @@
                 <div class="coordination-card">
                     <div class="card-header">
                         <span class={`badge ${c.asset_category === 'free_asset' ? 'badge-free' : 'badge-paid'}`}>
-                            {c.asset_category === 'free_asset' ? 'FREE CLASS' : 'PAID CLASS'}
+                            {c.asset_category === 'free_asset' ? 'FREE CLASS' : 'Free Class'}
                         </span>
                         <h3>{c.subject} — {c.topic}</h3>
                     </div>
                     <div class="card-body">
                         <p><strong>📅 Date:</strong> {c.target_date ? `${new Date(c.target_date).toLocaleDateString()} ${c.target_time ? `at ${c.target_time}` : ''}` : '—'}</p>
+                        <p><strong>📚 Course:</strong> {c.subject}</p>
+                        <p><strong>🎯 Topic:</strong> {c.topic}</p>
                         <p><strong>👤 Tutor:</strong> {c.creator_status === 'deleted' ? "[Deleted User]" : (c.created_by_name || 'Unknown')}</p>
                         <p><strong>🎓 Learning Goals:</strong> {c.outcomes || 'Not specified'}</p>
-                        {c.trick_pattern && <p><strong>🎯 Exam Pattern:</strong> {c.trick_pattern}</p>}
+                        {c.trick_pattern && <p><strong>📝 Exam Pattern:</strong> {c.trick_pattern}</p>}
+                        {c.class_link && <p><strong>🔗 Link:</strong> <a href={c.class_link.startsWith('http') ? c.class_link : `https://${c.class_link}`} target="_blank" class="text-blue-600 underline">{c.class_link}</a></p>}
                     </div>
                 </div>
             );
@@ -1143,7 +1149,7 @@
             const SessionCard = ({ s }) => (
                 <div class="coordination-card">
                     <div class="card-header">
-                        <h3>{s.subject} — Support Session</h3>
+                        <h3>{s.subject}</h3>
                     </div>
                     <div class="card-body">
                         <p><strong>📅 Date:</strong> {new Date(s.session_date).toLocaleDateString()}</p>
@@ -1216,7 +1222,7 @@
                                     <div key={c.id} class="promotion-card">
                                         <div class="card-header">
                                             <span class={`badge ${c.asset_category === 'free_asset' ? 'badge-free' : 'badge-paid'}`}>
-                                                {c.asset_category === 'free_asset' ? 'FREE CLASS' : 'PAID CLASS'}
+                                                {c.asset_category === 'free_asset' ? 'FREE CLASS' : 'Free Class'}
                                             </span>
                                             <h3>{c.subject} — {c.topic}</h3>
                                         </div>
@@ -1228,6 +1234,7 @@
                                                 <p><strong>👤 Tutor:</strong> {c.creator_status === 'deleted' ? "[Deleted User]" : (c.created_by_name || 'Unknown')}</p>
                                                 <p><strong>🎓 Learning Goals:</strong> {c.outcomes || 'Not specified'}</p>
                                                 {c.trick_pattern && <p><strong>📝 Exam Pattern:</strong> {c.trick_pattern}</p>}
+                                                {c.class_link && <p><strong>🔗 Link:</strong> <a href={c.class_link.startsWith('http') ? c.class_link : `https://${c.class_link}`} target="_blank" class="text-blue-600 underline">{c.class_link}</a></p>}
                                             </div>
                                         </div>
                                     </div>
@@ -1245,7 +1252,7 @@
                                 : sessions.map(s => (
                                     <div key={s.id} class="promotion-card">
                                         <div class="card-header">
-                                            <h3>{s.subject} — 1-on-1 Support</h3>
+                                            <h3>{s.subject}</h3>
                                         </div>
                                         <div class="card-body">
                                             <p><strong>📅 Date:</strong> {new Date(s.session_date).toLocaleDateString()}</p>
@@ -2147,23 +2154,23 @@
                 <form onSubmit={submit} class="bg-white border p-6 rounded-lg mb-6 shadow-sm">
                     <h3 class="font-bold mb-4 italic">Campaign Intake</h3>
                     <div class="grid grid-cols-2 gap-4 mb-4">
-                        <input placeholder="Subject/Course (e.g. G12 Math)" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, subject: e.target.value })} required />
-                        <input type="date" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, target_date: e.target.value })} required />
+                        <input placeholder="Subject/Course (e.g. G12 Math)" value={form.subject} class="border p-2 rounded text-sm" onChange={e => setForm(p => ({ ...p, subject: e.target.value }))} required />
+                        <input type="date" value={form.target_date} class="border p-2 rounded text-sm" onChange={e => setForm(p => ({ ...p, target_date: e.target.value }))} required />
                         <div class="flex flex-col gap-1">
-                            <input type="time" class="border p-2 rounded text-sm w-full" onChange={e => setForm({ ...form, target_time: e.target.value })} required />
+                            <input type="time" value={form.target_time} class="border p-2 rounded text-sm w-full" onChange={e => setForm(p => ({ ...p, target_time: e.target.value }))} required />
                             <p class="text-[10px] text-gray-400">Class/Campaign Time (required)</p>
                         </div>
-                        <input placeholder="Class link (Zoom/Meet)" class="border p-2 rounded text-sm" onChange={e => setForm({ ...form, class_link: e.target.value })} />
+                        <input placeholder="Class link (Zoom/Meet)" value={form.class_link} class="border p-2 rounded text-sm" onChange={e => setForm(p => ({ ...p, class_link: e.target.value }))} />
                     </div>
-                    <input placeholder="Campaign Topic" class="w-full border p-2 rounded mb-4 text-sm" onChange={e => setForm({ ...form, topic: e.target.value })} required />
+                    <input placeholder="Campaign Topic" value={form.topic} class="w-full border p-2 rounded mb-4 text-sm" onChange={e => setForm(p => ({ ...p, topic: e.target.value }))} required />
 
                     <div class="relative mb-4">
-                        <textarea placeholder="Examiner Trick/Pattern" class="w-full border p-2 rounded text-sm h-16" maxLength="500" onChange={e => setForm({ ...form, trick_pattern: e.target.value })} />
+                        <textarea placeholder="Examiner Trick/Pattern" value={form.trick_pattern} class="w-full border p-2 rounded text-sm h-16" maxLength="500" onChange={e => setForm(p => ({ ...p, trick_pattern: e.target.value }))} />
                         <span class="absolute right-2 bottom-2 text-[10px] text-gray-400">{form.trick_pattern.length}/500</span>
                     </div>
 
                     <div class="relative mb-4">
-                        <textarea placeholder="Target Learning Outcomes" class="w-full border p-2 rounded text-sm h-16" maxLength="500" onChange={e => setForm({ ...form, outcomes: e.target.value })} />
+                        <textarea placeholder="Target Learning Outcomes" value={form.outcomes} class="w-full border p-2 rounded text-sm h-16" maxLength="500" onChange={e => setForm(p => ({ ...p, outcomes: e.target.value }))} />
                         <span class="absolute right-2 bottom-2 text-[10px] text-gray-400">{form.outcomes.length}/500</span>
                     </div>
 
@@ -2193,9 +2200,14 @@
                                 </span>
                             </div>
                             <div>
-                                <p class="text-xs font-bold text-gray-400 uppercase mb-1">{campaign.subject}</p>
+                                <p class="text-xs font-bold text-gray-400 uppercase mb-1">{campaign.subject} {campaign.target_time ? `· Time: ${campaign.target_time}` : ''}</p>
                                 <h3 class="text-lg font-bold">{campaign.topic}</h3>
-                                <p class="text-xs text-gray-400">By {campaign.creator_status === 'deleted' ? "[Deleted User]" : campaign.tutor_name} · Target: {campaign.target_date ? new Date(campaign.target_date).toLocaleDateString() : 'TBD'} {campaign.target_time ? ` at ${campaign.target_time}` : ''}</p>
+                                <p class="text-xs text-gray-400">By {campaign.creator_status === 'deleted' ? "[Deleted User]" : (campaign.created_by_name || 'Unknown')} · Target: {campaign.target_date ? new Date(campaign.target_date).toLocaleDateString() : 'TBD'} {campaign.target_time ? ` at ${campaign.target_time}` : ''}</p>
+                                <div class="mt-2 space-y-1">
+                                    <p class="text-[10px] text-gray-500"><strong>📚 Course:</strong> {campaign.subject}</p>
+                                    <p class="text-[10px] text-gray-500"><strong>🎯 Topic:</strong> {campaign.topic}</p>
+                                    {campaign.class_link && <p class="text-[10px] text-gray-500"><strong>🔗 Link:</strong> <a href={campaign.class_link.startsWith('http') ? campaign.class_link : `https://${campaign.class_link}`} target="_blank" class="text-blue-600 underline">{campaign.class_link}</a></p>}
+                                </div>
                             </div>
                         </div>
                         <span class="text-[10px] font-black uppercase px-2 py-1 border rounded">{campaign.status.replace('_', ' ')}</span>
