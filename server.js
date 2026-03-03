@@ -1504,6 +1504,133 @@ app.get('/api/dashboard', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/system-metrics - CEO/HOD Overview (Polish 3)
+app.get('/api/system-metrics', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'hod' && req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const { month } = req.query; // YYYY-MM
+    const dateParam = month ? `${month}-01` : 'now';
+
+    try {
+        const query = `
+            WITH
+            -- ── Campaigns ─────────────────────────────────────────────────────
+            monthly_campaigns AS (
+                SELECT COUNT(*) as total,
+                       COUNT(*) FILTER (WHERE c.status = 'approved') as approved,
+                       COUNT(*) FILTER (WHERE c.status = 'pending_approval') as pending,
+                       COUNT(*) FILTER (WHERE c.status = 'rejected') as rejected,
+                       u.id as user_id, u.name as user_name, u.role as user_role
+                FROM campaigns c
+                JOIN users u ON c.tutor_id = u.id
+                WHERE DATE_TRUNC('month', c.created_at) = DATE_TRUNC('month', $1::TIMESTAMP)
+                  AND c.deleted_at IS NULL
+                GROUP BY u.id, u.name, u.role
+            ),
+            campaign_metrics AS (
+                SELECT COALESCE(SUM(total), 0) as total_campaigns,
+                       COALESCE(SUM(approved), 0) as approved_campaigns,
+                       COALESCE(SUM(pending), 0) as pending_campaigns,
+                       COALESCE(SUM(rejected), 0) as rejected_campaigns,
+                       COALESCE(json_agg(json_build_object(
+                           'user_id', user_id, 'user_name', user_name, 'user_role', user_role,
+                           'total', total, 'approved', approved, 'pending', pending, 'rejected', rejected
+                       )), '[]'::json) as user_breakdown
+                FROM monthly_campaigns
+            ),
+            -- ── Assessments ───────────────────────────────────────────────────
+            monthly_assessments AS (
+                SELECT COUNT(*) as total, a.subject,
+                       u.id as user_id, u.name as user_name, u.role as user_role
+                FROM assessments a
+                JOIN users u ON a.created_by = u.id
+                WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', $1::TIMESTAMP)
+                  AND a.deleted_at IS NULL
+                GROUP BY a.subject, u.id, u.name, u.role
+            ),
+            assessment_user_agg AS (
+                SELECT user_id, user_name, user_role, subject, SUM(total) as total, SUM(total) as total_sub
+                FROM monthly_assessments
+                GROUP BY user_id, user_name, user_role, subject
+            ),
+            assessment_metrics AS (
+                SELECT COALESCE(SUM(total), 0) as total_assessments,
+                       COALESCE(json_object_agg(subject, total_sub) FILTER (WHERE subject IS NOT NULL), '{}'::json) as by_subject,
+                       COALESCE(json_agg(json_build_object(
+                           'user_id', user_id, 'user_name', user_name, 'user_role', user_role,
+                           'total', total, 'subject', subject
+                       )), '[]'::json) as user_breakdown
+                FROM assessment_user_agg
+            ),
+            -- ── Assets ────────────────────────────────────────────────────────
+            monthly_assets AS (
+                SELECT COUNT(*) as uploaded,
+                       COUNT(*) FILTER (WHERE a.status = 'approved') as approved,
+                       COUNT(*) FILTER (WHERE a.status = 'published') as published,
+                       COUNT(*) FILTER (WHERE a.status = 'rejected') as rejected,
+                       u.id as user_id, u.name as user_name, u.role as user_role
+                FROM hub_assets a
+                JOIN users u ON a.tutor_id = u.id
+                WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', $1::TIMESTAMP)
+                GROUP BY u.id, u.name, u.role
+            ),
+            asset_metrics AS (
+                SELECT COALESCE(SUM(uploaded), 0) as total_uploaded,
+                       COALESCE(SUM(approved), 0) as total_approved,
+                       COALESCE(SUM(published), 0) as total_published,
+                       COALESCE(SUM(rejected), 0) as total_rejected,
+                       COALESCE(json_agg(json_build_object(
+                           'user_id', user_id, 'user_name', user_name, 'user_role', user_role,
+                           'uploaded', uploaded, 'approved', approved, 'published', published, 'rejected', rejected
+                       )), '[]'::json) as user_breakdown
+                FROM monthly_assets
+            ),
+            -- ── Support Sessions ──────────────────────────────────────────────
+            monthly_sessions AS (
+                SELECT COUNT(*) as total,
+                       COUNT(*) FILTER (WHERE s.status = 'completed') as completed,
+                       u.id as user_id, u.name as user_name, u.role as user_role
+                FROM support_sessions s
+                JOIN users u ON s.scheduled_by = u.id
+                WHERE DATE_TRUNC('month', s.created_at) = DATE_TRUNC('month', $1::TIMESTAMP)
+                GROUP BY u.id, u.name, u.role
+            ),
+            session_metrics AS (
+                SELECT COALESCE(SUM(total), 0) as total_sessions,
+                       COALESCE(SUM(completed), 0) as completed_sessions,
+                       COALESCE(json_agg(json_build_object(
+                           'user_id', user_id, 'user_name', user_name, 'user_role', user_role,
+                           'total', total, 'completed', completed
+                       )), '[]'::json) as user_breakdown
+                FROM monthly_sessions
+            ),
+            -- ── Users ─────────────────────────────────────────────────────────
+            user_metrics AS (
+                SELECT 
+                    (SELECT COUNT(*) FROM users WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', $1::TIMESTAMP)) as new_registrations,
+                    (SELECT COUNT(*) FROM users WHERE DATE_TRUNC('month', approved_at) = DATE_TRUNC('month', $1::TIMESTAMP)) as new_approvals,
+                    (SELECT COUNT(*) FROM users WHERE account_status = 'approved' AND deleted_at IS NULL) as total_active,
+                    (SELECT json_object_agg(role, c) FROM (SELECT role, COUNT(*) as c FROM users WHERE account_status = 'approved' AND deleted_at IS NULL GROUP BY role) t) as by_role
+            )
+            SELECT json_build_object(
+                'campaigns',   (SELECT row_to_json(c) FROM campaign_metrics c),
+                'assessments', (SELECT row_to_json(a) FROM assessment_metrics a),
+                'assets',      (SELECT row_to_json(ast) FROM asset_metrics ast),
+                'sessions',    (SELECT row_to_json(s) FROM session_metrics s),
+                'users',       (SELECT row_to_json(u) FROM user_metrics u),
+                'month',       TO_CHAR($1::TIMESTAMP, 'YYYY-MM')
+            ) as metrics;
+        `;
+        const result = await pool.query(query, [dateParam]);
+        res.json(result.rows[0].metrics);
+    } catch (error) {
+        console.error('Metrics Error:', error);
+        res.status(500).json({ error: 'Failed to fetch metrics', detail: error.message });
+    }
+});
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 3005;
@@ -1511,4 +1638,4 @@ const PORT = process.env.PORT || 3005;
 // Run migration on startup
 runSoftDeleteMigration().catch(console.error);
 
-app.listen(PORT, () => console.log(`🚀 TSH PORTAL Backend (Week 4) running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 TSH PORTAL Backend(Week 4) running on port ${PORT} `));
